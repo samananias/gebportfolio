@@ -85,4 +85,73 @@ test.describe("Core Mindset Carousel", () => {
       expect(newLeft).not.toBe(initialLeft);
     }).toPass({ timeout: 15_000 });
   });
+
+  test("should keep the active card fully inside the viewport at a later slide", async ({
+    page,
+  }) => {
+    const fourthTab = page.getByRole("tab", { name: "Go to slide 4: Evidence Over Assumptions" });
+    const fourthSlide = page.getByRole("group", {
+      name: "Slide 4 of 5: Evidence Over Assumptions",
+    });
+
+    await expect(async () => {
+      await fourthTab.click();
+      await expect(fourthSlide).toHaveAttribute("aria-current", "true");
+    }).toPass({ timeout: 15_000 });
+
+    // Wait for the 500ms track transform transition to settle, then assert
+    // the active card lies fully inside the viewport horizontally (2px tolerance).
+    const tolerance = 2;
+    await expect(async () => {
+      const box = (await fourthSlide.boundingBox()) as { x: number; width: number };
+      const viewportWidth = page.viewportSize()?.width ?? 0;
+      expect(box.x).toBeGreaterThanOrEqual(-tolerance);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewportWidth + tolerance);
+    }).toPass({ timeout: 15_000 });
+  });
+
+  test("should advance to the next slide on a horizontal swipe", async ({ page, isMobile }) => {
+    if (!isMobile) return;
+
+    const firstSlide = page.getByRole("group", { name: "Slide 1 of 5: Strategy Before Code" });
+    const secondSlide = page.getByRole("group", { name: "Slide 2 of 5: Context Over Memory" });
+    const region = page.getByRole("region", { name: "Core Mindset Principles" });
+    const box = (await region.boundingBox())!;
+
+    const startX = box.x + box.width * 0.8;
+    const startY = box.y + box.height / 2;
+    const endX = startX - Math.max(160, box.width * 0.6);
+
+    await expect(async () => {
+      // Playwright's touchscreen API has no swipe primitive and WebKit blocks
+      // TouchEvent/Touch construction ("Illegal constructor"); dispatch plain
+      // events shaped like touch events — the component only reads
+      // touches[0]/changedTouches[0].clientX off them.
+      const fire = (
+        locator: ReturnType<typeof page.getByRole>,
+        type: string,
+        x: number,
+        y: number,
+        withTouches: boolean
+      ) =>
+        locator.evaluate(
+          (el, { type, x, y, withTouches }) => {
+            const evt = document.createEvent("Event");
+            evt.initEvent(type, true, true);
+            const point = { clientX: x, clientY: y };
+            Object.defineProperty(evt, "touches", {
+              value: withTouches ? [point] : [],
+            });
+            Object.defineProperty(evt, "changedTouches", { value: [point] });
+            el.dispatchEvent(evt);
+          },
+          { type, x, y, withTouches }
+        );
+
+      await fire(firstSlide, "touchstart", startX, startY, true);
+      await fire(secondSlide, "touchend", endX, startY, false);
+      await expect(secondSlide).toHaveAttribute("aria-current", "true");
+      await expect(firstSlide).not.toHaveAttribute("aria-current", "true");
+    }).toPass({ timeout: 15_000 });
+  });
 });

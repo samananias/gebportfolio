@@ -47,3 +47,5 @@ test-results/
 .codex/
 .github/hooks/
 
+# kilocode setting folder
+.kilo/

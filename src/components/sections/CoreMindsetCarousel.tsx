@@ -123,14 +123,14 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
   return (
     <div
       ref={containerRef}
-      className="relative w-full overflow-hidden py-4"
+      className="relative w-full overflow-clip py-4"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
       <div role="region" aria-label="Core Mindset Principles" className="relative w-full">
         {/* Track container */}
         <div
-          className="flex transition-transform duration-500 ease-out"
+          className="flex gap-6 transition-transform duration-500 ease-out"
           style={{
             transform: getTrackTransform(activeIndex, slideWidth),
           }}
