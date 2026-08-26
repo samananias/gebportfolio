@@ -16,6 +16,7 @@ const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60;
 
 const DESTINATION_ADDRESS = "samananiascases@gmail.com";
+const DEFAULT_SENDER_ADDRESS = "contact@samananias.is-a.dev";
 
 interface MinimalKV {
   get(key: string, type: "json"): Promise<unknown>;
@@ -83,12 +84,12 @@ function jsonOk(): Response {
 }
 
 /** Builds an RFC 5322 plain-text message body for the Email Workers binding. */
-function buildRawMime(payload: ContactPayload): string {
+function buildRawMime(payload: ContactPayload, senderAddress: string): string {
   const escapeHeader = (value: string) => value.replace(/[\r\n]+/g, " ");
   return [
-    `From: ${DESTINATION_ADDRESS}`,
+    `From: ${escapeHeader(payload.name)} <${senderAddress}>`,
     `To: ${DESTINATION_ADDRESS}`,
-    `Reply-To: ${escapeHeader(payload.email)}`,
+    `Reply-To: ${escapeHeader(payload.name)} <${escapeHeader(payload.email)}>`,
     `Subject: [Portfolio] ${escapeHeader(payload.name)}`,
     "Content-Type: text/plain; charset=utf-8",
     "",
@@ -118,7 +119,7 @@ async function isRateLimited(kv: MinimalKV | null, ip: string): Promise<boolean>
   return false;
 }
 
-async function deliverEmail(raw: string): Promise<boolean> {
+async function deliverEmail(raw: string, senderAddress: string): Promise<boolean> {
   try {
     const sender = getBinding<{ send(message: unknown): Promise<void> }>("CONTACT_EMAIL");
     if (!sender?.send) {
@@ -130,7 +131,7 @@ async function deliverEmail(raw: string): Promise<boolean> {
       EmailMessage: new (from: string, to: string, raw: string) => unknown;
     };
 
-    const email = new emailModule.EmailMessage(DESTINATION_ADDRESS, DESTINATION_ADDRESS, raw);
+    const email = new emailModule.EmailMessage(senderAddress, DESTINATION_ADDRESS, raw);
     await sender.send(email);
     return true;
   } catch {
@@ -182,7 +183,9 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonError("Too many messages sent recently. Please try again later.", 429);
     }
 
-    const delivered = await deliverEmail(buildRawMime(payload));
+    const senderAddress = getBinding<string>("CONTACT_SENDER_EMAIL") || DEFAULT_SENDER_ADDRESS;
+    const rawMime = buildRawMime(payload, senderAddress);
+    const delivered = await deliverEmail(rawMime, senderAddress);
 
     if (!delivered) {
       // No email binding (local dev or delivery failure): archive instead of losing the message
