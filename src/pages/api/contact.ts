@@ -179,7 +179,9 @@ export const POST: APIRoute = async ({ request }) => {
 
     const kv = getBinding<MinimalKV>("CHAT_KV");
     const ip = request.headers.get("cf-connecting-ip") ?? "";
-    if (await isRateLimited(kv, ip)) {
+    // Rate limiting is production-only: local dev/E2E shares one miniflare IP,
+    // so the per-IP bucket would block legitimate testing for an hour.
+    if (import.meta.env.PROD && (await isRateLimited(kv, ip))) {
       return jsonError("Too many messages sent recently. Please try again later.", 429);
     }
 

@@ -45,6 +45,9 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
   const settledIndexRef = useRef(0);
   const pawnAnchorRef = useRef(0);
   const pawnLocalRef = useRef(0);
+  // Holds a user-driven selection (tab click/keyboard/swipe) until the eased
+  // scrub arrives at its target; null means pure scroll input owns the index.
+  const pendingSelectRef = useRef<number | null>(null);
   const total = principles.length;
   const slideWidth = isMobile ? 88 : 42;
   const pawnOffsetRem = isMobile ? 3.0 : 5.75;
@@ -124,7 +127,17 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
 
       const position = smoothedProgressRef.current * (total - 1);
       const nextIndex = Math.min(total - 1, Math.max(0, Math.round(position)));
-      setActiveIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+      if (pendingSelectRef.current !== null) {
+        // A pending user selection owns the active index: never overwrite it
+        // from the in-flight scroll position. Clear the claim once the scrub
+        // arrives at the target so scroll-scrubbing resumes ownership.
+        if (Math.abs(position - pendingSelectRef.current) <= 0.05) {
+          pendingSelectRef.current = null;
+          setActiveIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+        }
+      } else {
+        setActiveIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+      }
 
       // Settle detection: fire the pawn hop once per gesture, only after the
       // eased scrub rests near the target and the target has held steady.
@@ -209,6 +222,16 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
     [total, prefersReducedMotion]
   );
 
+  // User-driven navigation: claim the active index synchronously so aria-current
+  // reflects intent immediately, independent of smooth-scroll timing; the track
+  // still eases toward the target via the existing scrub.
+  const selectSlide = (index: number) => {
+    const clamped = Math.min(total - 1, Math.max(0, index));
+    pendingSelectRef.current = clamped;
+    setActiveIndex(clamped);
+    scrollToSlide(clamped);
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0].clientX;
   };
@@ -219,7 +242,7 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
     touchStartXRef.current = null;
     if (Math.abs(diffX) > 40) {
       const baseIndex = Math.round(smoothedProgressRef.current * (total - 1));
-      scrollToSlide(diffX > 0 ? baseIndex + 1 : baseIndex - 1);
+      selectSlide(diffX > 0 ? baseIndex + 1 : baseIndex - 1);
     }
   };
 
@@ -266,17 +289,17 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
                 aria-label={`Slide ${i + 1} of ${total}: ${p.title}`}
                 aria-current={isActive}
                 tabIndex={0}
-                onClick={() => scrollToSlide(i)}
+                onClick={() => selectSlide(i)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    scrollToSlide(i);
+                    selectSlide(i);
                   } else if (e.key === "ArrowRight" || e.key === "Right") {
                     e.preventDefault();
-                    scrollToSlide(i + 1);
+                    selectSlide(i + 1);
                   } else if (e.key === "ArrowLeft" || e.key === "Left") {
                     e.preventDefault();
-                    scrollToSlide(i - 1);
+                    selectSlide(i - 1);
                   }
                 }}
                 className="group bg-surface border-border-custom/80 focus-visible:ring-focus focus-visible:ring-offset-bg relative flex shrink-0 cursor-pointer flex-col justify-between rounded-3xl border p-5 transition-all duration-500 ease-out outline-none focus-visible:ring-2 focus-visible:ring-offset-2 md:min-h-[340px] md:p-8"
@@ -342,17 +365,17 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
                 role="tab"
                 aria-selected={isActive}
                 aria-label={`Go to slide ${i + 1}: ${p.title}`}
-                onClick={() => scrollToSlide(i)}
+                onClick={() => selectSlide(i)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    scrollToSlide(i);
+                    selectSlide(i);
                   } else if (e.key === "ArrowRight" || e.key === "Right") {
                     e.preventDefault();
-                    scrollToSlide(i + 1);
+                    selectSlide(i + 1);
                   } else if (e.key === "ArrowLeft" || e.key === "Left") {
                     e.preventDefault();
-                    scrollToSlide(i - 1);
+                    selectSlide(i - 1);
                   }
                 }}
                 className="focus-visible:ring-focus focus-visible:ring-offset-bg relative z-10 flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md transition-all duration-300 outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
