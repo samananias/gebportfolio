@@ -25,8 +25,9 @@ export const ThreePawnCanvas: React.FC<ThreePawnCanvasProps> = ({
   const activeIndexRef = useRef(activeIndex);
   const prevIndexRef = useRef(activeIndex);
   const jumpTriggerRef = useRef<{ startTime: number; direction: number } | null>(null);
+  const hopCountRef = useRef(0);
 
-  // Trigger physics jump whenever activeIndex changes
+  // Trigger physics jump whenever the settled active index changes
   useEffect(() => {
     if (activeIndex !== activeIndexRef.current) {
       const dir = activeIndex > activeIndexRef.current ? 1 : -1;
@@ -36,6 +37,8 @@ export const ThreePawnCanvas: React.FC<ThreePawnCanvasProps> = ({
         startTime: performance.now(),
         direction: dir,
       };
+      hopCountRef.current += 1;
+      containerRef.current?.setAttribute("data-hop-count", String(hopCountRef.current));
     }
   }, [activeIndex]);
 
@@ -48,11 +51,12 @@ export const ThreePawnCanvas: React.FC<ThreePawnCanvasProps> = ({
     // 1. Scene Setup
     const scene = new THREE.Scene();
 
-    // 2. Camera Setup (tabletop perspective with ample vertical headroom)
+    // 2. Camera Setup (tabletop perspective with ample vertical headroom so the
+    // hop apex stays fully inside the frame)
     const width = container.clientWidth || 100;
     const height = container.clientHeight || 100;
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
-    camera.position.set(0, 2.55, 3.85);
+    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 1000);
+    camera.position.set(0, 3.5, 3.85);
     camera.lookAt(0, 0.85, 0);
 
     // 3. WebGL Renderer Setup
@@ -286,7 +290,7 @@ export const ThreePawnCanvas: React.FC<ThreePawnCanvasProps> = ({
               // Phase 2: Upward Arc Hop & Directional Pitch Tilt
               const arcT = (t - 0.15) / 0.63;
               const arcSin = Math.sin(arcT * Math.PI);
-              jumpY = arcSin * 0.72; // Player lift hop height
+              jumpY = arcSin * 0.66; // Player lift hop height
               scaleY = 1.0 + 0.12 * arcSin;
               scaleXZ = 1.0 - 0.07 * arcSin;
 
@@ -353,5 +357,7 @@ export const ThreePawnCanvas: React.FC<ThreePawnCanvasProps> = ({
     };
   }, []);
 
-  return <div ref={containerRef} className={`relative h-full w-full ${className}`} />;
+  return (
+    <div ref={containerRef} data-hop-count={0} className={`relative h-full w-full ${className}`} />
+  );
 };

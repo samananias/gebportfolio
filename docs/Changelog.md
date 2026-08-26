@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Changed **Core Mindset Carousel Pawn Travelator Anchoring** (`src/components/sections/CoreMindsetCarousel.tsx`, `tests/e2e/core-mindset-carousel.spec.ts`):
+  - Replaced the pawn's viewport-center float behavior with a **moving-sidewalk model**: during scroll scrubbing, the 3D Pawn now rides 1:1 with its owned card instead of mirroring the smoothed track position and staying pinned near viewport center.
+  - Added **card ownership with hysteresis hand-off** (`PAWN_ANCHOR_HYSTERESIS = 0.55`): ownership transfers to the neighboring card only after the scrubbed position drifts past the midpoint plus hysteresis, preventing flicker near midpoints while resting between slides.
+  - Added **eased walk transition** (`PAWN_WALK_EASE = 6`, slower than the track's smoothing factor of 8): when ownership hands off, the pawn visibly walks across to its new card counter to the track motion.
+  - Kept `prefers-reduced-motion` bypass: reduced-motion users get an instant snap to the nearest card with no walk animation, and the single-hop-per-gesture settle behavior remains unchanged.
+  - Added Playwright E2E test verifying the pawn rests anchored to its nearest card when scrolling stops exactly between two slides (progress `0.375` → position `1.5`), asserting hysteresis keeps ownership on the earlier card.
+
+- Fixed **Core Mindset Carousel Track Styling, Viewport Bounds & Touch Swipe E2E Tests** (`src/components/sections/CoreMindsetCarousel.tsx`, `tests/e2e/core-mindset-carousel.spec.ts`, `.gitignore`):
+  - Switched carousel container overflow styling from `overflow-hidden` to `overflow-clip` to avoid unintended scroll container creation while preserving clean card boundary clipping.
+  - Added `gap-6` inter-card spacing to the slide track container to maintain consistent visual separation across slide transitions.
+  - Added Playwright E2E tests verifying active card horizontal containment within viewport boundaries on later slides and verifying horizontal touch swipe gesture navigation on mobile devices.
+  - Added `.kilo/` workspace settings directory to `.gitignore`.
+
 - Added **Chess Checkmate, Pawn Promotion & Contributor Tracking System** ([0004.3 Roadmap](plans/0004.3-chess-checkmate-and-promotion-roadmap.md), [0004.2 Specification](plans/0004.2-chess-checkmate-and-pawn-promotion-plan.md)):
   - Implemented **Interactive Pawn Promotion Modal** ([PromotionModal.tsx](../src/components/chess/PromotionModal.tsx)): In-board Woodcut popover dialog prompting players to select Queen, Knight, Rook, or Bishop when promoting pawns to rank 8/1.
   - Implemented **Finished Game Archival & Reset API** ([reset.ts](../src/pages/api/chess/reset.ts), [archive.ts](../src/pages/api/chess/archive.ts)): `POST /api/chess/reset` archives finished matches into D1/memory, resets match board position to initial FEN, resets match contributor counts, and re-assigns team cookies.

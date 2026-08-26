@@ -15,20 +15,39 @@ interface CoreMindsetCarouselProps {
 }
 
 const GAP_REM = 1.5;
+const PAWN_ANCHOR_HYSTERESIS = 0.55;
+const PAWN_WALK_EASE = 6;
 
-/** Compute track transform centering slide `index` with dynamic `slideWidth` */
-function getTrackTransform(index: number, slideWidth: number): string {
+/** Compute track transform centering fractional slide position `position` with dynamic `slideWidth` */
+function getTrackTransform(position: number, slideWidth: number): string {
   const initialOffsetPct = 50 - slideWidth / 2;
-  return `translateX(calc(${initialOffsetPct}% - ${index * slideWidth}% - ${index * GAP_REM}rem))`;
+  return `translateX(calc(${initialOffsetPct}% - ${position * slideWidth}% - ${position * GAP_REM}rem))`;
+}
+
+/** Compute pawn wrapper `left` for a fractional slide position */
+function getPawnLeft(position: number, slideWidth: number, pawnOffsetRem: number): string {
+  return `calc(${position * slideWidth}% + ${position * GAP_REM}rem + ${slideWidth / 2}% - ${pawnOffsetRem}rem)`;
 }
 
 export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ principles }) => {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [settledIndex, setSettledIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const pawnWrapperRef = useRef<HTMLDivElement | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  const targetProgressRef = useRef(0);
+  const smoothedProgressRef = useRef(0);
+  const lastTargetRef = useRef(0);
+  const settleSinceRef = useRef(0);
+  const settledIndexRef = useRef(0);
+  const pawnAnchorRef = useRef(0);
+  const pawnLocalRef = useRef(0);
   const total = principles.length;
+  const slideWidth = isMobile ? 88 : 42;
+  const pawnOffsetRem = isMobile ? 3.0 : 5.75;
 
   // Track responsive screen width for dynamic slide scaling
   useEffect(() => {
@@ -52,22 +71,12 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
 
-  const slideWidth = isMobile ? 88 : 42;
-  const pawnOffsetRem = isMobile ? 3.0 : 5.75;
-
-  const scrollLockoutUntilRef = useRef<number>(0);
-
-  // Handle scroll progress within the sticky section wrapper (Desktop only)
+  // Scroll measurement: map page scroll within the sticky section to target progress [0, 1]
   useEffect(() => {
-    const handleScroll = () => {
-      // Ignore scroll events during programmatic scroll transitions (lockout period)
-      if (Date.now() < scrollLockoutUntilRef.current) return;
-
-      // Only drive sticky scrolljacking on desktop (≥ 768px)
-      if (window.innerWidth < 768) return;
-
-      if (!containerRef.current) return;
-      const parent = containerRef.current.closest("section") || containerRef.current.parentElement;
+    const measureScrollProgress = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const parent = container.closest("section") || container.parentElement;
       if (!parent) return;
 
       const rect = parent.getBoundingClientRect();
@@ -75,32 +84,129 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
 
       if (scrollableHeight <= 0) return;
 
-      // Progress from 0 to 1 as section scrolls past viewport
-      const rawProgress = -rect.top / scrollableHeight;
-      if (rawProgress < 0 || rawProgress > 1) return;
-
-      // Map progress to nearest slide index (symmetrical with scrollToSlide calculation)
-      const calculatedIndex = Math.min(
-        total - 1,
-        Math.max(0, Math.round(rawProgress * (total - 1)))
-      );
-      setActiveIndex((prev) => (prev !== calculatedIndex ? calculatedIndex : prev));
+      targetProgressRef.current = Math.min(1, Math.max(0, -rect.top / scrollableHeight));
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
+    measureScrollProgress();
+    window.addEventListener("scroll", measureScrollProgress, { passive: true });
+    window.addEventListener("resize", measureScrollProgress);
 
     return () => {
-      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", measureScrollProgress);
+      window.removeEventListener("resize", measureScrollProgress);
     };
-  }, [total]);
+  }, []);
 
+  // rAF loop: critically damp smoothed progress toward scroll-mapped target and write styles
+  useEffect(() => {
+    const container = containerRef.current;
+    const track = trackRef.current;
+    const pawn = pawnWrapperRef.current;
+    if (!container || !track || !pawn) return;
+
+    let rafId = 0;
+    let lastTime = performance.now();
+    let isVisible = true;
+
+    const tick = (now: number) => {
+      if (!isVisible) return;
+      rafId = requestAnimationFrame(tick);
+
+      const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
+      lastTime = now;
+
+      const target = targetProgressRef.current;
+      if (prefersReducedMotion) {
+        smoothedProgressRef.current = target;
+      } else {
+        smoothedProgressRef.current += (target - smoothedProgressRef.current) * Math.min(1, dt * 8);
+      }
+
+      const position = smoothedProgressRef.current * (total - 1);
+      const nextIndex = Math.min(total - 1, Math.max(0, Math.round(position)));
+      setActiveIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+
+      // Settle detection: fire the pawn hop once per gesture, only after the
+      // eased scrub rests near the target and the target has held steady.
+      if (target !== lastTargetRef.current) {
+        lastTargetRef.current = target;
+        settleSinceRef.current = now;
+      } else if (
+        Math.abs(target - smoothedProgressRef.current) < 0.004 &&
+        (prefersReducedMotion || now - settleSinceRef.current >= 180)
+      ) {
+        settleSinceRef.current = now;
+        if (settledIndexRef.current !== nextIndex) {
+          settledIndexRef.current = nextIndex;
+          setSettledIndex(nextIndex);
+        }
+      }
+
+      track.style.transform = getTrackTransform(position, slideWidth);
+
+      // Travelator model: the pawn owns a card (anchor) and rides 1:1 with it
+      // while the track scrubs beneath; ownership hands off to the neighbor
+      // card once it drifts past midpoint + hysteresis, easing a visible walk.
+      const H = PAWN_ANCHOR_HYSTERESIS;
+      const maxIndex = total - 1;
+      if (position > pawnAnchorRef.current + H) {
+        pawnAnchorRef.current = Math.min(pawnAnchorRef.current + 1, maxIndex);
+      } else if (position < pawnAnchorRef.current - H) {
+        pawnAnchorRef.current = Math.max(pawnAnchorRef.current - 1, 0);
+      }
+
+      if (prefersReducedMotion) {
+        pawnLocalRef.current = Math.min(maxIndex, Math.max(0, Math.round(position)));
+      } else {
+        pawnLocalRef.current +=
+          (pawnAnchorRef.current - pawnLocalRef.current) * Math.min(1, dt * PAWN_WALK_EASE);
+      }
+      pawn.style.left = getPawnLeft(pawnLocalRef.current, slideWidth, pawnOffsetRem);
+    };
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const wasVisible = isVisible;
+        isVisible = entry.isIntersecting;
+        if (isVisible && !wasVisible) {
+          cancelAnimationFrame(rafId);
+          lastTime = performance.now();
+          settleSinceRef.current = lastTime;
+          rafId = requestAnimationFrame(tick);
+        }
+      },
+      { threshold: 0.05 }
+    );
+    observer.observe(container);
+
+    rafId = requestAnimationFrame(tick);
+
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, [total, slideWidth, pawnOffsetRem, prefersReducedMotion]);
+
+  // Smooth-scroll the page to the position that maps to the requested slide
   const scrollToSlide = useCallback(
     (index: number) => {
-      const targetIndex = Math.max(0, Math.min(total - 1, index));
-      setActiveIndex(targetIndex);
-      scrollLockoutUntilRef.current = Date.now() + 4000;
+      const targetIndex = Math.min(total - 1, Math.max(0, index));
+      const container = containerRef.current;
+      if (!container) return;
+      const parent = container.closest("section") || container.parentElement;
+      if (!parent) return;
+
+      const rect = parent.getBoundingClientRect();
+      const scrollableHeight = rect.height - window.innerHeight;
+      if (scrollableHeight <= 0) return;
+
+      const top = rect.top + window.scrollY + (targetIndex / (total - 1)) * scrollableHeight;
+      window.scrollTo({
+        top,
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+      });
     },
-    [total]
+    [total, prefersReducedMotion]
   );
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -112,11 +218,8 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
     const diffX = touchStartXRef.current - e.changedTouches[0].clientX;
     touchStartXRef.current = null;
     if (Math.abs(diffX) > 40) {
-      if (diffX > 0) {
-        scrollToSlide(activeIndex + 1);
-      } else {
-        scrollToSlide(activeIndex - 1);
-      }
+      const baseIndex = Math.round(smoothedProgressRef.current * (total - 1));
+      scrollToSlide(diffX > 0 ? baseIndex + 1 : baseIndex - 1);
     }
   };
 
@@ -130,25 +233,25 @@ export const CoreMindsetCarousel: React.FC<CoreMindsetCarouselProps> = ({ princi
       <div role="region" aria-label="Core Mindset Principles" className="relative w-full">
         {/* Track container */}
         <div
-          className="flex gap-6 transition-transform duration-500 ease-out"
+          ref={trackRef}
+          data-testid="mindset-track"
+          className="flex gap-6"
           style={{
             transform: getTrackTransform(activeIndex, slideWidth),
           }}
         >
           {/* Animated 3D Chess Pawn Companion */}
           <div
+            ref={pawnWrapperRef}
             data-testid="mindset-pawn"
             aria-hidden="true"
             className="pointer-events-none absolute -top-4 z-30 h-20 w-16 md:-top-7 md:h-28 md:w-24"
             style={{
-              left: `calc(${activeIndex * slideWidth}% + ${activeIndex * GAP_REM}rem + ${slideWidth / 2}% - ${pawnOffsetRem}rem)`,
-              transition: prefersReducedMotion
-                ? "none"
-                : "left 600ms cubic-bezier(0.25, 1, 0.5, 1)",
+              left: getPawnLeft(activeIndex, slideWidth, pawnOffsetRem),
             }}
           >
             <ThreePawnCanvas
-              activeIndex={activeIndex}
+              activeIndex={settledIndex}
               prefersReducedMotion={prefersReducedMotion}
             />
           </div>

@@ -31,13 +31,14 @@ const gridTiles = Array.from({ length: 16 }, (_, i) => {
 
 <button
   type="button"
+  data-interactive-avatar
   class:list={[
     "group bg-surface border-ink relative block cursor-pointer overflow-hidden rounded-xl border-[2.5px] p-0 text-left transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-600",
     sizeClasses[size],
     className,
   ]}
   style="box-shadow: 3px 3px 0 var(--color-ink);"
-  aria-label="Interactive profile avatar of Sam Ananias Cases. Hover or focus to reveal portrait photo via chessboard grid wipe."
+  aria-label="Interactive profile avatar of Sam Ananias Cases. Hover, tap, or focus to reveal portrait photo via chessboard grid wipe."
 >
   <!-- Background Layer: Revealed Portrait Photo -->
   <div class="bg-surface absolute inset-0">
@@ -56,7 +57,7 @@ const gridTiles = Array.from({ length: 16 }, (_, i) => {
     {
       gridTiles.map((tile) => (
         <div
-          class="bg-surface absolute inset-0 flex transform items-center justify-center p-4 transition-all duration-300 ease-in-out group-hover:scale-0 group-hover:opacity-0 group-focus-visible:scale-0 group-focus-visible:opacity-0"
+          class="bg-surface absolute inset-0 flex transform items-center justify-center p-4 transition-all duration-300 ease-in-out group-hover:scale-0 group-hover:opacity-0 group-focus-visible:scale-0 group-focus-visible:opacity-0 group-data-[avatar-revealed]:scale-0 group-data-[avatar-revealed]:opacity-0"
           style={`clip-path: ${tile.clipPath}; transition-delay: ${tile.delayMs}ms;`}
         >
           <Logo class="h-full w-full object-contain" />
@@ -64,9 +65,23 @@ const gridTiles = Array.from({ length: 16 }, (_, i) => {
       ))
     }
     <span
-      class="text-muted bg-surface/90 border-ink/20 absolute bottom-2 left-1/2 z-20 -translate-x-1/2 rounded border px-2 py-0.5 font-mono text-[9px] font-semibold tracking-wide whitespace-nowrap uppercase shadow-sm transition-opacity duration-200 group-hover:opacity-0 group-focus-visible:opacity-0 md:text-[10px] md:tracking-widest"
+      class="text-muted bg-surface/90 border-ink/20 absolute bottom-2 left-1/2 z-20 -translate-x-1/2 rounded border px-2 py-0.5 font-mono text-[9px] font-semibold tracking-wide whitespace-nowrap uppercase shadow-sm transition-opacity duration-200 group-hover:opacity-0 group-focus-visible:opacity-0 group-data-[avatar-revealed]:opacity-0 md:text-[10px] md:tracking-widest"
     >
-      Hover for Photo
+      <span class="pointer-coarse:hidden">Hover for Photo</span>
+      <span class="hidden pointer-coarse:inline">Tap for Photo</span>
     </span>
   </div>
 </button>
+
+<script>
+  // Touch devices have no hover: tapping toggles the chessboard grid wipe
+  // via the data-avatar-revealed attribute. Hover-driven desktops are
+  // unaffected (the attribute toggle is gated on a coarse primary pointer).
+  const coarsePointerQuery = window.matchMedia("(pointer: coarse)");
+  document.querySelectorAll<HTMLButtonElement>("[data-interactive-avatar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!coarsePointerQuery.matches) return;
+      button.toggleAttribute("data-avatar-revealed");
+    });
+  });
+</script>
