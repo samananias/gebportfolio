@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Removed **Viber contact channel and phone number** (`src/content/data/site.json`, `src/pages/contact.astro`, `PRODUCT.md`): dropped the `viber` social link, the Direct Lines Viber row, and the phone number from all rendered surfaces and product truth; contact is now email + contact form only.
+
+- Hardened & Polished **Contact Form Validation, States & Test Coverage** (`src/pages/contact.astro`, `tests/e2e/contact.spec.ts`) — Step 3 of the Contact page redesign:
+  - Added **custom in-system field validation**: inline error messages (`aria-describedby`-linked, `aria-invalid` toggling) with project copy voice ("That email address doesn't look right."), first-invalid focus management, and per-field error clearing on input — replacing browser-native validation bubbles.
+  - Fixed **stale character counter without JS**: counter is now hidden server-side and revealed only when script can keep it truthful; resets correctly via "Compose another".
+  - Added hover hint on the Viber channel row ("Opens Viber on mobile") since the deep link is inert on desktop.
+  - Added Playwright E2E suite (`tests/e2e/contact.spec.ts`): empty-form inline validation + aria-invalid assertions, successful submission → delivered panel visibility/focus/compose-another reset, and route-mocked 500 response → live status region message with form contents preserved.
+
+- Redesigned **Contact Page Surface** (`src/pages/contact.astro`, `src/content/data/site.json`, `src/layouts/BaseLayout.astro`) — Step 2 of the Contact page redesign:
+  - Rebuilt the surface in the locked **Woodcut visual world**: structural 2.5px linework on all cards/inputs (`border-structural`, `rounded-sm`), manuscript eyebrow badge (`07 · Correspondence`), `DividerChessboard` section boundary, decorative board corner coordinates (`a8`–`h1`) framing the compose panel, and hard-pressed Button primitive vocabulary.
+  - Replaced all `@lucide/astro` icons with theme-aware `<DoodleIcon>` vector SVGs (`mail`, `phone`, `location-pin`, `shield`, `send`, `mail-open`), resolving the brand-lock violation.
+  - Wired the form to `POST /api/contact` via fetch with **idle / sending / delivered / failed** states: pre-rendered loading button swap (zero hydration cost, no React island), `role="status"` aria-live error region naming the problem and recovery path, delivered confirmation panel with focus management, and native form POST fallback when JS is unavailable.
+  - Added client-side affordances: visible required-field markers (mono asterisks + sr-only labels), live character counter against the 5000-char server cap, hidden honeypot field matching the endpoint's bot trap.
+  - Rewrote copy for factual truth: privacy panel now accurately describes Cloudflare email routing handling ("no third-party trackers, no analytics scripts") instead of the false "stored locally inside this static form submittal" claim; fixed stale `sam@samanias.com` fallback email to `samananiascases@gmail.com`.
+  - Fixed **Viber social link pointing to GitHub** (`site.json`): now uses the `viber://chat?number=%2B639925731056` deep link; filtered `sameAs` JSON-LD in BaseLayout to HTTPS web URLs so the deep link does not corrupt structured data.
+  - Added route-specific meta description and fixed heading hierarchy (h1 → h2 panels, no level skips).
+  - Verified desktop (1440px) and mobile (390px) renders in a batched screenshot pass; fixed mobile email truncation found in inspection.
+
+- Added **Cloudflare-Native Contact Form Endpoint** (`src/pages/api/contact.ts`, `wrangler.jsonc`, `src/content/data/site.json`) — Step 1 of the Contact page redesign:
+  - Implemented `POST /api/contact` (SSR, non-prerendered) validating and sanitizing name/email/message server-side with length caps (100/254/5000 chars), mirroring existing API route conventions (`chat/send.ts`).
+  - Added **Cloudflare Email Routing delivery** via the `CONTACT_EMAIL` `send_email` binding (`wrangler.jsonc`): submissions are routed as RFC 5322 plain-text email with visitor Reply-To to Sam's verified inbox — zero third-party form services. Requires one-time destination address verification in the Cloudflare dashboard.
+  - Added **KV inbox persistence**: every delivered submission is archived under `contact:inbox:*` in `CHAT_KV`; undelivered submissions (local dev or delivery failure) fall back to archival so no message is silently lost.
+  - Added **abuse resistance**: invisible honeypot field (`website`, silently accepted) and per-IP rate limiting via KV TTL keys (`contact:rl:<ip>`, 3 submissions/hour).
+  - Configured `contactSettings.formEndpoint: "/api/contact"` in `site-config` (schema field already existed in `content.config.ts`).
+
 - Changed **Core Mindset Carousel Pawn Travelator Anchoring** (`src/components/sections/CoreMindsetCarousel.tsx`, `tests/e2e/core-mindset-carousel.spec.ts`):
   - Replaced the pawn's viewport-center float behavior with a **moving-sidewalk model**: during scroll scrubbing, the 3D Pawn now rides 1:1 with its owned card instead of mirroring the smoothed track position and staying pinned near viewport center.
   - Added **card ownership with hysteresis hand-off** (`PAWN_ANCHOR_HYSTERESIS = 0.55`): ownership transfers to the neighboring card only after the scrubbed position drifts past the midpoint plus hysteresis, preventing flicker near midpoints while resting between slides.

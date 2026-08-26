@@ -119,9 +119,9 @@ const groupLabels = ["WORK", "WRITING", "META"];
           url: siteConfig?.canonicalURL ?? Astro.url.origin,
           jobTitle: siteConfig?.headline ?? "Bachelor of Industrial Technology (Computer)",
           email: siteConfig?.contactSettings?.email ?? "samananiascases@gmail.com",
-          sameAs: siteConfig?.socialLinks?.map((s) => s.url) ?? [
-            "https://github.com/SamAnaniasCases",
-          ],
+          sameAs: siteConfig?.socialLinks
+            ?.map((s) => s.url)
+            .filter((url) => url.startsWith("https://")) ?? ["https://github.com/SamAnaniasCases"],
         },
         {
           "@context": "https://schema.org",
