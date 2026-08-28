@@ -13,6 +13,7 @@ The core technology dependencies, choices, and alternatives.
 - **Editor/CMS**: Keystatic (Local/Git mode) - Visual editor without database overhead.
 - **Chat State**: Cloudflare KV - Cross-isolate shared message storage for the live chat feature (`CHAT_KV`, HTTP polling).
 - **Database**: Cloudflare D1 (`DB`) - Serverless SQLite database for the anonymous shared chess game feature (`9100d65e-3df5-4256-9c14-3f93831c04fa`).
+- **Contact Delivery**: Cloudflare Email Routing (`CONTACT_EMAIL` `send_email` binding) - Serverless contact form delivery routed directly to a verified destination inbox, with KV inbox archival (`contact:inbox:*`) and per-IP rate limiting. No third-party form services.
 - **Language**: TypeScript (strict mode).
 - **Package Manager**: pnpm.
 - **Linting/Formatting**: ESLint + Prettier.

@@ -54,11 +54,9 @@ const principles: MindsetPrinciple[] = [
 ];
 ---
 
-<section class="bg-surface-subtle/50 relative min-h-0 overflow-x-clip md:min-h-[200vh]">
-  <!-- Viewport Container: natural flow on mobile, sticky scroll-driven on desktop -->
-  <div
-    class="relative py-6 md:sticky md:top-0 md:flex md:min-h-screen md:flex-col md:justify-center md:py-10"
-  >
+<section class="bg-surface-subtle/50 relative min-h-[300vh] overflow-x-clip md:min-h-[200vh]">
+  <!-- Viewport Container: sticky scroll-driven at all breakpoints -->
+  <div class="relative sticky top-0 flex min-h-screen flex-col justify-center py-6 md:py-10">
     <!-- Top Boundary Divider -->
     <Container width="default">
       <DividerChessboard />

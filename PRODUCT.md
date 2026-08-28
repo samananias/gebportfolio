@@ -59,7 +59,7 @@ This is the claim a competing candidate's portfolio cannot truthfully copy witho
 - **Academic background:** Bachelor of Industrial Technology, Computer major — CTU Danao.
 - **Credentials:** Certifications tracked in `/src/content/achievements/`.
 - **GitHub:** `https://github.com/SamAnaniasCases`
-- **Contact:** `samananiascases@gmail.com` / Viber 09925731056
+- **Contact:** `samananiascases@gmail.com` (email and contact form only — Viber/phone deliberately not offered publicly)
 - **Absence note:** No published third-party testimonials or press coverage currently exists; future work must not fabricate these.
 
 ## Product Principles

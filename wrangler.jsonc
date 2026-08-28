@@ -18,6 +18,16 @@
     },
   ],
 
+  // Cloudflare Email Routing — routes contact form submissions to Sam's verified
+  // inbox. Requires samananiascases@gmail.com to be a verified destination address
+  // in the Cloudflare dashboard (Email Routing → Destination addresses).
+  "send_email": [
+    {
+      "name": "CONTACT_EMAIL",
+      "destination_address": "samananiascases@gmail.com",
+    },
+  ],
+
   "observability": {
     "logs": {
       "enabled": true,

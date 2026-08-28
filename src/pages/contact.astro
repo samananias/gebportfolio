@@ -1,131 +1,466 @@
 ---
+/**
+ * Contact — correspondence surface (Woodcut world).
+ * Rebuild contract: structural 2.5px linework, DoodleIcon vocabulary, chess
+ * motif (board divider + corner coordinates), hard-offset press interactions.
+ * Submits via fetch to POST /api/contact (Cloudflare Email Routing + KV inbox)
+ * with idle / sending / delivered / failed states; native POST fallback when
+ * JS is unavailable.
+ */
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Container from "../components/primitives/Container.astro";
 import Button from "../components/primitives/Button.astro";
+import DividerChessboard from "../components/primitives/DividerChessboard.astro";
+import DoodleIcon from "../components/ui/DoodleIcon.astro";
 import { getEntry } from "astro:content";
-import { Mail, Send, ShieldCheck } from "@lucide/astro";
 
-// Get Site Config Singleton
 const siteEntry = await getEntry("site", "site-config");
 const siteConfig = siteEntry?.data;
+
+const email = siteConfig?.contactSettings?.email ?? "samananiascases@gmail.com";
+const formEndpoint = siteConfig?.contactSettings?.formEndpoint ?? "/api/contact";
+
+const githubUrl =
+  siteConfig?.socialLinks?.find((link) => link.platform === "github")?.url ??
+  "https://github.com/SamAnaniasCases";
+
+const MESSAGE_MAX = 5000;
+
+const inputClass =
+  "bg-bg border-border-custom border-structural text-text focus-visible:ring-focus text-body duration-fast rounded-md w-full px-4 py-2.5 transition-shadow outline-none focus-visible:ring-2 placeholder:text-text-muted";
 ---
 
-<BaseLayout title="Contact Me">
-  <Container width="default" class="animate-reveal space-y-12 py-12">
+<BaseLayout
+  title="Contact Me"
+  description="Contact Sam Ananias Cases for engineering roles, freelance systems projects, or collaboration — direct email or the contact form."
+>
+  <Container width="default" class="animate-reveal space-y-10 py-12">
     <!-- Header -->
-    <header class="border-border-custom space-y-3 border-b pb-6">
-      <h1 class="text-h1 font-display text-text font-bold tracking-tight">Get in Touch</h1>
+    <header class="space-y-4">
+      <span
+        class="border-ink/20 bg-surface-subtle text-caption text-primary inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono font-semibold tracking-widest uppercase select-none"
+      >
+        <DoodleIcon name="mail" class="text-primary size-3.5" />
+        07 · Correspondence
+      </span>
+      <h1 class="text-h1 font-display text-text font-bold tracking-tight">Send Your Move</h1>
       <p class="text-body-large text-text-muted max-w-2xl leading-relaxed">
-        Have a question or want to collaborate on a systems engineering project? Drop me a message
-        below.
+        Have a role to fill, a systems project to build, or an engineering question worth debating?
+        Write below — I usually reply within 24–48 hours.
       </p>
     </header>
 
-    <div class="grid grid-cols-1 gap-12 lg:grid-cols-5">
-      <!-- Contact Info Sidebar -->
-      <div class="space-y-6 lg:col-span-2">
-        <div class="border-border-custom bg-surface space-y-6 rounded-2xl border p-6">
-          <h3 class="text-h4 font-display text-text border-border-custom border-b pb-3 font-bold">
-            Direct Contact
-          </h3>
-          <p class="text-body text-text-muted leading-relaxed">
-            I am generally responsive via email and usually get back to technical queries within
-            24–48 hours.
-          </p>
+    <DividerChessboard />
 
-          <div class="flex items-center gap-3">
-            <div
-              class="bg-surface-subtle border-border-custom text-primary shrink-0 rounded-lg border p-2"
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:gap-12">
+      <!-- Direct channels sidebar -->
+      <aside class="space-y-6 lg:col-span-2">
+        <section class="border-border-custom bg-surface border-structural space-y-2 rounded-sm p-6">
+          <h2 class="text-h4 font-display text-text pb-3 font-bold">Direct Lines</h2>
+
+          <a
+            href={`mailto:${email}`}
+            class="border-border-custom hover:bg-surface-subtle -mx-2 flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors duration-200"
+          >
+            <span
+              class="bg-surface-subtle border-border-custom text-primary shrink-0 rounded-sm border p-2"
             >
-              <Mail class="size-5" />
-            </div>
-            <div>
-              <span class="text-caption text-text-muted block tracking-wider uppercase"
-                >Email Address</span
-              >
-              {
-                siteConfig?.contactSettings.email ? (
-                  <a
-                    href={`mailto:${siteConfig.contactSettings.email}`}
-                    class="text-body text-primary font-semibold hover:underline"
-                  >
-                    {siteConfig.contactSettings.email}
-                  </a>
-                ) : (
-                  <span class="text-body text-text font-medium">sam@samananias.com</span>
-                )
-              }
-            </div>
-          </div>
-        </div>
+              <DoodleIcon name="mail" class="size-5" />
+            </span>
+            <span class="min-w-0">
+              <span class="text-caption text-text-muted block font-mono tracking-wider uppercase">
+                Email
+              </span>
+              <span class="text-body text-primary block font-semibold break-words">
+                {email}
+              </span>
+            </span>
+          </a>
 
-        <div class="border-border-custom bg-surface-subtle space-y-3 rounded-2xl border p-6">
-          <h4 class="text-body font-display text-text flex items-center gap-2 font-bold">
-            <ShieldCheck class="text-primary size-5" />
-            Privacy Invariant
-          </h4>
-          <p class="text-small text-text-muted leading-relaxed">
-            Your data is stored locally inside this static form submittal. No third-party tracking
-            scripts or tracking cookies are enabled.
-          </p>
-        </div>
-      </div>
+          <a
+            href={githubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="border-border-custom hover:bg-surface-subtle -mx-2 flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors duration-200"
+          >
+            <span
+              class="bg-surface-subtle border-border-custom text-primary shrink-0 rounded-sm border p-2"
+            >
+              <DoodleIcon name="location-pin" class="size-5" />
+            </span>
+            <span class="min-w-0">
+              <span class="text-caption text-text-muted block font-mono tracking-wider uppercase">
+                GitHub
+              </span>
+              <span class="text-body text-text block truncate font-semibold">
+                @SamAnaniasCases
+              </span>
+            </span>
+          </a>
+        </section>
 
-      <!-- Contact Form -->
-      <div class="lg:col-span-3">
-        <form
-          action={siteConfig?.contactSettings.formEndpoint ?? "#"}
-          method="POST"
-          class="border-border-custom bg-surface space-y-6 rounded-2xl border p-6"
+        <section
+          class="border-border-custom bg-surface-subtle border-structural space-y-3 rounded-sm p-6"
         >
-          <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <!-- Name -->
-            <div class="space-y-2">
-              <label for="name" class="text-small text-text font-semibold">Your Name</label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                required
-                placeholder="Sam Ananias"
-                class="bg-bg border-border-custom text-text focus-visible:ring-focus text-body duration-fast w-full rounded-lg border px-4 py-2.5 transition-shadow outline-none focus-visible:ring-2"
-              />
-            </div>
+          <h2 class="text-h4 font-display text-text flex items-center gap-2 font-bold">
+            <DoodleIcon name="shield" class="text-primary size-5" />
+            Privacy, Stated Plainly
+          </h2>
+          <p class="text-small text-text-muted leading-relaxed">
+            This form sends your message straight to my inbox through Cloudflare's email routing. No
+            third-party trackers, no analytics scripts, no ads — the only data handled is what you
+            type above.
+          </p>
+        </section>
+      </aside>
 
-            <!-- Email -->
-            <div class="space-y-2">
-              <label for="email" class="text-small text-text font-semibold">Email Address</label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                required
-                placeholder="sam@example.com"
-                class="bg-bg border-border-custom text-text focus-visible:ring-focus text-body duration-fast w-full rounded-lg border px-4 py-2.5 transition-shadow outline-none focus-visible:ring-2"
-              />
-            </div>
+      <!-- Compose panel -->
+      <div class="lg:col-span-3">
+        <div
+          class="border-border-custom bg-surface border-structural relative rounded-sm p-6 sm:p-8"
+        >
+          <!-- Board corner coordinates (decorative) -->
+          <span
+            aria-hidden="true"
+            class="text-micro text-text-muted absolute top-2 left-3 font-mono tracking-widest select-none"
+          >
+            a8
+          </span>
+          <span
+            aria-hidden="true"
+            class="text-micro text-text-muted absolute top-2 right-3 font-mono tracking-widest select-none"
+          >
+            h8
+          </span>
+          <span
+            aria-hidden="true"
+            class="text-micro text-text-muted absolute bottom-2 left-3 font-mono tracking-widest select-none"
+          >
+            a1
+          </span>
+          <span
+            aria-hidden="true"
+            class="text-micro text-text-muted absolute right-3 bottom-2 font-mono tracking-widest select-none"
+          >
+            h1
+          </span>
+
+          <!-- Form panel -->
+          <div id="contact-form-panel">
+            <form id="contact-form" action={formEndpoint} method="POST" novalidate>
+              <div class="space-y-6">
+                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <!-- Name -->
+                  <div class="space-y-2">
+                    <label for="name" class="text-small text-text block font-semibold">
+                      Name
+                      <span class="text-primary" aria-hidden="true">*</span>
+                      <span class="sr-only">(required)</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      required
+                      maxlength="100"
+                      autocomplete="name"
+                      placeholder="Juan Dela Cruz"
+                      aria-describedby="name-error"
+                      class={inputClass}
+                    />
+                    <p
+                      id="name-error"
+                      class="text-small hidden font-semibold text-red-600 dark:text-red-400"
+                    >
+                    </p>
+                  </div>
+
+                  <!-- Email -->
+                  <div class="space-y-2">
+                    <label for="email" class="text-small text-text block font-semibold">
+                      Email
+                      <span class="text-primary" aria-hidden="true">*</span>
+                      <span class="sr-only">(required)</span>
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      required
+                      maxlength="254"
+                      autocomplete="email"
+                      placeholder="you@example.com"
+                      aria-describedby="email-error"
+                      class={inputClass}
+                    />
+                    <p
+                      id="email-error"
+                      class="text-small hidden font-semibold text-red-600 dark:text-red-400"
+                    >
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Message -->
+                <div class="space-y-2">
+                  <label for="message" class="text-small text-text block font-semibold">
+                    Message
+                    <span class="text-primary" aria-hidden="true">*</span>
+                    <span class="sr-only">(required)</span>
+                  </label>
+                  <textarea
+                    id="message"
+                    name="message"
+                    required
+                    rows="7"
+                    maxlength={MESSAGE_MAX}
+                    placeholder="Describe the role, project scope, or question…"
+                    aria-describedby="message-error message-counter-hint"
+                    class={`${inputClass} resize-y`}></textarea>
+                  <p
+                    id="message-counter-hint"
+                    class="text-caption text-text-muted hidden text-right font-mono tracking-wide select-none"
+                  >
+                    <span id="message-counter">0</span>&nbsp;/&nbsp;{MESSAGE_MAX}
+                  </p>
+                  <p
+                    id="message-error"
+                    class="text-small hidden font-semibold text-red-600 dark:text-red-400"
+                  >
+                  </p>
+                </div>
+
+                <!-- Honeypot — invisible to humans, irresistible to bots -->
+                <div class="hidden" aria-hidden="true">
+                  <label for="website">Website</label>
+                  <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+                </div>
+
+                <!-- Status region -->
+                <p
+                  id="contact-status"
+                  role="status"
+                  aria-live="polite"
+                  class="border-border-custom bg-surface-subtle text-small text-text hidden rounded-md border p-3"
+                >
+                </p>
+
+                <!-- Submit -->
+                <div class="flex items-center gap-4">
+                  <span id="contact-submit-wrap">
+                    <Button type="submit" variant="primary" size="lg" id="contact-submit">
+                      Send Message
+                      <DoodleIcon name="send" class="size-4" />
+                    </Button>
+                  </span>
+                  <span id="contact-loading-wrap" hidden>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="lg"
+                      isLoading={true}
+                      tabindex="-1"
+                    >
+                      Sending…
+                    </Button>
+                  </span>
+                  <span
+                    class="text-caption text-text-muted font-mono tracking-wide select-none max-sm:hidden"
+                  >
+                    Pressed once, delivered once.
+                  </span>
+                </div>
+              </div>
+            </form>
           </div>
 
-          <!-- Message -->
-          <div class="space-y-2">
-            <label for="message" class="text-small text-text font-semibold">Your Message</label>
-            <textarea
-              id="message"
-              name="message"
-              required
-              rows="6"
-              placeholder="Detail your request or engineering scope here..."
-              class="bg-bg border-border-custom text-text focus-visible:ring-focus text-body duration-fast w-full resize-y rounded-lg border px-4 py-2.5 transition-shadow outline-none focus-visible:ring-2"
-            ></textarea>
+          <!-- Delivered panel -->
+          <div id="contact-success-panel" hidden tabindex="-1" class="py-6 text-center">
+            <div
+              class="border-border-custom bg-surface-subtle mx-auto flex size-16 items-center justify-center rounded-full border p-4"
+            >
+              <DoodleIcon name="mail-open" class="text-primary size-8" />
+            </div>
+            <h2 class="text-h3 font-display text-text mt-6 font-bold">Message delivered</h2>
+            <p class="text-body text-text-muted mx-auto mt-3 max-w-md leading-relaxed">
+              Your move is on the board — it landed in my inbox and I'll answer within 24–48 hours.
+            </p>
+            <div class="mt-8">
+              <Button type="button" variant="ghost" size="md" id="contact-compose-again">
+                Compose another
+              </Button>
+            </div>
           </div>
-
-          <!-- Submit Button -->
-          <Button type="submit" variant="primary" class="w-full sm:w-auto">
-            Send Message
-            <Send class="size-4" />
-          </Button>
-        </form>
+        </div>
       </div>
     </div>
   </Container>
 </BaseLayout>
+
+<script>
+  const form = document.getElementById("contact-form") as HTMLFormElement | null;
+  const formPanel = document.getElementById("contact-form-panel");
+  const successPanel = document.getElementById("contact-success-panel");
+  const statusEl = document.getElementById("contact-status");
+  const submitWrap = document.getElementById("contact-submit-wrap");
+  const loadingWrap = document.getElementById("contact-loading-wrap");
+  const composeAgain = document.getElementById("contact-compose-again");
+  const messageField = document.getElementById("message") as HTMLTextAreaElement | null;
+  const nameField = document.getElementById("name") as HTMLInputElement | null;
+  const emailField = document.getElementById("email") as HTMLInputElement | null;
+  const counterHint = document.getElementById("message-counter-hint");
+  const counter = document.getElementById("message-counter");
+
+  type Field = HTMLInputElement | HTMLTextAreaElement;
+
+  function fieldError(field: Field | null): HTMLParagraphElement | null {
+    if (!field) return null;
+    return document.getElementById(`${field.id}-error`) as HTMLParagraphElement | null;
+  }
+
+  function setFieldError(field: Field, message: string): void {
+    field.setAttribute("aria-invalid", "true");
+    const errorEl = fieldError(field);
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.classList.remove("hidden");
+    }
+  }
+
+  function clearFieldError(field: Field): void {
+    field.removeAttribute("aria-invalid");
+    const errorEl = fieldError(field);
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.classList.add("hidden");
+    }
+  }
+
+  function setSending(sending: boolean): void {
+    if (submitWrap && loadingWrap) {
+      submitWrap.hidden = sending;
+      loadingWrap.hidden = !sending;
+    }
+  }
+
+  function showError(text: string): void {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.classList.remove("hidden");
+  }
+
+  function clearError(): void {
+    if (!statusEl) return;
+    statusEl.textContent = "";
+    statusEl.classList.add("hidden");
+  }
+
+  if (form && formPanel && successPanel) {
+    if (messageField && counterHint && counter) {
+      // The live counter only renders once JS can keep it truthful
+      counterHint.classList.remove("hidden");
+      messageField.addEventListener("input", () => {
+        counter.textContent = String(messageField.value.length);
+        if (messageField.value.length > 0) {
+          clearFieldError(messageField);
+        }
+      });
+    }
+
+    nameField?.addEventListener("input", () => {
+      if (nameField.value.trim().length > 0) clearFieldError(nameField);
+    });
+    emailField?.addEventListener("input", () => {
+      if (emailField.checkValidity()) clearFieldError(emailField);
+    });
+
+    function validateFields(): boolean {
+      [nameField, emailField, messageField].forEach((field) => {
+        if (field) clearFieldError(field);
+      });
+
+      const problems: Array<[Field, string]> = [];
+
+      if (nameField && nameField.value.trim().length === 0) {
+        problems.push([nameField, "Please enter your name."]);
+      }
+
+      if (emailField && (emailField.value.trim().length === 0 || !emailField.checkValidity())) {
+        problems.push([emailField, "That email address doesn't look right."]);
+      }
+
+      if (messageField && messageField.value.trim().length === 0) {
+        problems.push([messageField, "The message is empty — write your question or scope first."]);
+      }
+
+      for (const [field, message] of problems) {
+        setFieldError(field, message);
+      }
+
+      problems[0]?.[0].focus();
+      return problems.length === 0;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError();
+
+      if (!validateFields()) {
+        return;
+      }
+
+      const payload = {
+        name: nameField?.value ?? "",
+        email: emailField?.value ?? "",
+        message: messageField?.value ?? "",
+        website: (form.elements.namedItem("website") as HTMLInputElement)?.value ?? "",
+      };
+
+      setSending(true);
+
+      try {
+        const response = await fetch(form.action, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = (await response.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+        };
+
+        if (response.ok && result.ok) {
+          formPanel.hidden = true;
+          successPanel.hidden = false;
+          successPanel.focus();
+          return;
+        }
+
+        showError(
+          result.error ||
+            "The message could not be sent right now. Please try again, or email me directly."
+        );
+      } catch {
+        showError(
+          "The network dropped that move. Check your connection and try again, or email me directly."
+        );
+      } finally {
+        setSending(false);
+      }
+    });
+
+    composeAgain?.addEventListener("click", () => {
+      form.reset();
+      [nameField, emailField, messageField].forEach((field) => {
+        if (field) clearFieldError(field);
+      });
+      if (counter && messageField) {
+        counter.textContent = "0";
+      }
+      clearError();
+      successPanel.hidden = true;
+      formPanel.hidden = false;
+      nameField?.focus();
+    });
+  }
+</script>

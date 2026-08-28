@@ -13,16 +13,12 @@
         "platform": "github",
         "url": "https://github.com/SamAnaniasCases",
         "label": "GitHub"
-      },
-      {
-        "platform": "viber",
-        "url": "https://github.com/SamAnaniasCases",
-        "label": "Viber (09925731056)"
       }
     ],
     "defaultImage": "/og-default.png",
     "contactSettings": {
-      "email": "samananiascases@gmail.com"
+      "email": "samananiascases@gmail.com",
+      "formEndpoint": "/api/contact"
     }
   }
 ]
