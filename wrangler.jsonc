@@ -18,15 +18,11 @@
     },
   ],
 
-  // Cloudflare Email Routing — routes contact form submissions to Sam's verified
-  // inbox. Requires samananiascases@gmail.com to be a verified destination address
-  // in the Cloudflare dashboard (Email Routing → Destination addresses).
-  "send_email": [
-    {
-      "name": "CONTACT_EMAIL",
-      "destination_address": "samananiascases@gmail.com",
-    },
-  ],
+  // Contact delivery uses the Brevo transactional email API (see
+  // docs/decisions/0007-deliver-contact-via-brevo-transactional-api.md).
+  // The API key is NOT declared here — it lives as the BREVO_API_KEY secret
+  // in the Cloudflare dashboard (Workers & Pages → gebportfolio → Settings →
+  // Variables and Secrets) so it is never committed to the repository.
 
   "observability": {
     "logs": {

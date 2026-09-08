@@ -15,8 +15,14 @@ const LIMITS = {
 const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60;
 
-const DESTINATION_ADDRESS = "samananiascases@gmail.com";
-const DEFAULT_SENDER_ADDRESS = "contact@samananias.is-a.dev";
+/**
+ * Verified Brevo sender address. Brevo's free tier requires no domain
+ * authentication — the individual sender is verified by email confirmation,
+ * so this must stay a mailbox the author can confirm (see ADR 0007).
+ */
+const INBOX_ADDRESS = "samananiascases@gmail.com";
+const SENDER_NAME = "Portfolio contact form";
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
 interface MinimalKV {
   get(key: string, type: "json"): Promise<unknown>;
@@ -83,22 +89,60 @@ function jsonOk(): Response {
   });
 }
 
-/** Builds an RFC 5322 plain-text message body for the Email Workers binding. */
-function buildRawMime(payload: ContactPayload, senderAddress: string): string {
-  const escapeHeader = (value: string) => value.replace(/[\r\n]+/g, " ");
-  return [
-    `From: ${escapeHeader(payload.name)} <${senderAddress}>`,
-    `To: ${DESTINATION_ADDRESS}`,
-    `Reply-To: ${escapeHeader(payload.name)} <${escapeHeader(payload.email)}>`,
-    `Subject: [Portfolio] ${escapeHeader(payload.name)}`,
-    "Content-Type: text/plain; charset=utf-8",
-    "",
-    `Name: ${payload.name}`,
-    `Email: ${payload.email}`,
-    "",
-    payload.message,
-    "",
-  ].join("\r\n");
+/**
+ * Sends the message through Brevo's transactional email API. The verified
+ * sender address is the author's own inbox; the visitor rides in Reply-To.
+ */
+async function deliverViaBrevo(apiKey: string, payload: ContactPayload): Promise<boolean> {
+  try {
+    const response = await fetch(BREVO_API_URL, {
+      method: "POST",
+      headers: {
+        "api-key": apiKey,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: SENDER_NAME, email: INBOX_ADDRESS },
+        to: [{ name: "Sam Ananias Cases", email: INBOX_ADDRESS }],
+        replyTo: { name: payload.name, email: payload.email },
+        subject: `[Portfolio] ${payload.name}`,
+        textContent: `Name: ${payload.name}\r\nEmail: ${payload.email}\r\n\r\n${payload.message}\r\n`,
+      }),
+    });
+
+    if (response.ok) {
+      return true;
+    }
+
+    // Log enough to diagnose (status + short body) without leaking the API key
+    const detail = await response.text().catch(() => "");
+    console.error(
+      `Contact delivery failed: Brevo responded HTTP ${response.status}. ${detail.slice(0, 200)}`
+    );
+    return false;
+  } catch (error) {
+    console.error("Contact delivery failed: Brevo request error.", error);
+    return false;
+  }
+}
+
+/** Best-effort KV archive so a message is never silently lost. */
+async function archiveToInbox(
+  kv: MinimalKV | null,
+  payload: ContactPayload,
+  delivered: boolean
+): Promise<void> {
+  if (!kv) return;
+  try {
+    const id = `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+    await kv.put(
+      `contact:inbox:${id}`,
+      JSON.stringify({ ...payload, timestamp: Date.now(), delivered })
+    );
+  } catch {
+    // Archival is best-effort alongside primary email delivery
+  }
 }
 
 async function isRateLimited(kv: MinimalKV | null, ip: string): Promise<boolean> {
@@ -117,39 +161,6 @@ async function isRateLimited(kv: MinimalKV | null, ip: string): Promise<boolean>
     // Rate limiting is best-effort; never block a legitimate submit on KV failure
   }
   return false;
-}
-
-async function deliverEmail(raw: string, senderAddress: string): Promise<boolean> {
-  try {
-    const sender = getBinding<{ send(message: unknown): Promise<void> }>("CONTACT_EMAIL");
-    if (!sender?.send) {
-      return false;
-    }
-
-    // cloudflare:email is only resolvable inside the Workers runtime
-    const emailModule = (await import(/* @vite-ignore */ "cloudflare:email" as string)) as {
-      EmailMessage: new (from: string, to: string, raw: string) => unknown;
-    };
-
-    const email = new emailModule.EmailMessage(senderAddress, DESTINATION_ADDRESS, raw);
-    await sender.send(email);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function persistToInbox(kv: MinimalKV | null, payload: ContactPayload): Promise<void> {
-  if (!kv) return;
-  try {
-    const id = `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
-    await kv.put(
-      `contact:inbox:${id}`,
-      JSON.stringify({ ...payload, timestamp: Date.now(), delivered: true })
-    );
-  } catch {
-    // Inbox persistence is best-effort alongside primary email delivery
-  }
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -185,32 +196,33 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonError("Too many messages sent recently. Please try again later.", 429);
     }
 
-    const senderAddress = getBinding<string>("CONTACT_SENDER_EMAIL") || DEFAULT_SENDER_ADDRESS;
-    const rawMime = buildRawMime(payload, senderAddress);
-    const delivered = await deliverEmail(rawMime, senderAddress);
+    const apiKey = getBinding<string>("BREVO_API_KEY");
+    const delivered = apiKey ? await deliverViaBrevo(apiKey, payload) : false;
 
     if (!delivered) {
-      // No email binding (local dev or delivery failure): archive instead of losing the message
-      if (kv) {
-        try {
-          const id = `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
-          await kv.put(
-            `contact:inbox:${id}`,
-            JSON.stringify({ ...payload, timestamp: Date.now(), delivered })
-          );
-        } catch {
-          // fall through — client still receives success only if archived
-          return jsonError(
-            "The message could not be delivered right now. Please email me directly instead.",
-            503
-          );
-        }
-        return jsonOk();
+      // Archive so the message is never silently lost
+      await archiveToInbox(kv, payload, false);
+
+      if (apiKey) {
+        // Brevo was configured but rejected or errored: be honest, offer recovery
+        return jsonError(
+          "The message could not be delivered right now. Please email me directly instead.",
+          502
+        );
       }
+      if (import.meta.env.PROD) {
+        console.error("Contact delivery skipped: BREVO_API_KEY is not configured.");
+        return jsonError(
+          "The message could not be delivered right now. Please email me directly instead.",
+          502
+        );
+      }
+      // Local dev/E2E without Brevo configured: accept the submission so
+      // form flows stay testable; no email is actually expected here.
       return jsonOk();
     }
 
-    await persistToInbox(kv, payload);
+    await archiveToInbox(kv, payload, true);
     return jsonOk();
   } catch {
     return jsonError("Failed to process your message.", 500);

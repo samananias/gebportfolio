@@ -3,7 +3,7 @@
  * Contact — correspondence surface (Woodcut world).
  * Rebuild contract: structural 2.5px linework, DoodleIcon vocabulary, chess
  * motif (board divider + corner coordinates), hard-offset press interactions.
- * Submits via fetch to POST /api/contact (Cloudflare Email Routing + KV inbox)
+ * Submits via fetch to POST /api/contact (Brevo transactional email + KV archive)
  * with idle / sending / delivered / failed states; native POST fallback when
  * JS is unavailable.
  */
@@ -107,9 +107,9 @@ const inputClass =
             Privacy, Stated Plainly
           </h2>
           <p class="text-small text-text-muted leading-relaxed">
-            This form sends your message straight to my inbox through Cloudflare's email routing. No
-            third-party trackers, no analytics scripts, no ads — the only data handled is what you
-            type above.
+            This form sends your message straight to my inbox through Brevo, an email delivery
+            service. There are no analytics scripts, no ads, and no tracking cookies — the only data
+            handled is what you type above.
           </p>
         </section>
       </aside>

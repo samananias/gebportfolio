@@ -13,7 +13,7 @@ The core technology dependencies, choices, and alternatives.
 - **Editor/CMS**: Keystatic (Local/Git mode) - Visual editor without database overhead.
 - **Chat State**: Cloudflare KV - Cross-isolate shared message storage for the live chat feature (`CHAT_KV`, HTTP polling).
 - **Database**: Cloudflare D1 (`DB`) - Serverless SQLite database for the anonymous shared chess game feature (`9100d65e-3df5-4256-9c14-3f93831c04fa`).
-- **Contact Delivery**: Cloudflare Email Routing (`CONTACT_EMAIL` `send_email` binding) - Serverless contact form delivery routed directly to a verified destination inbox, with KV inbox archival (`contact:inbox:*`) and per-IP rate limiting. No third-party form services.
+- **Contact Delivery**: Brevo transactional email API (`BREVO_API_KEY` dashboard secret) - Serverless contact form delivery via `fetch` from the API route, sent from the verified sender inbox with the visitor's address in `Reply-To`, plus KV inbox archival (`contact:inbox:*`) and per-IP rate limiting. Chosen over Cloudflare Email Routing because the `samananias.is-a.dev` subdomain (a CNAME to `gebportfolio.pages.dev`) cannot host the zone and DNS records Email Routing requires — see [ADR 0007](../decisions/0007-deliver-contact-via-brevo-transactional-api.md).
 - **Language**: TypeScript (strict mode).
 - **Package Manager**: pnpm.
 - **Linting/Formatting**: ESLint + Prettier.
