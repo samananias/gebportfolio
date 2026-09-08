@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fixed **Contact Form Delivery** (`src/pages/api/contact.ts`, `wrangler.jsonc`, `src/pages/contact.astro`, `docs/architecture/TechStack.md`, [ADR 0007](decisions/0007-deliver-contact-via-brevo-transactional-api.md)): production submissions silently failed (`delivered: false` archived to KV, visitor saw a false "Message delivered" panel) because `samananias.is-a.dev` — a CNAME to `gebportfolio.pages.dev` — cannot host the Cloudflare zone and DNS records that Email Routing requires.
+  - Replaced the `CONTACT_EMAIL` `send_email` binding with a direct `fetch` call to the Brevo transactional email API (free plan, 300 emails/day, no domain authentication required — see [ADR 0007](decisions/0007-deliver-contact-via-brevo-transactional-api.md)): mail is sent from the verified `samananiascases@gmail.com` sender with the visitor's address in `Reply-To`.
+  - Moved the Brevo API key out of the repository entirely: it lives as the `BREVO_API_KEY` secret in the Cloudflare dashboard (Workers & Pages → gebportfolio → Settings → Variables and Secrets).
+  - Hardened failure handling: delivery failures and a missing production key are logged with a structured `console.error` and return a 502 with recovery copy ("email me directly") instead of archiving and reporting success; KV archival (`contact:inbox:*`) remains as a backup so no message is lost.
+  - Kept local dev/E2E workable without a Brevo account: unconfigured local environments accept the submission and archive it without pretending email was sent.
+  - Rewrote the privacy panel copy to truthfully name Brevo as the delivery provider (the "no third-party" claim no longer holds).
+  - Removed the `send_email` binding block from `wrangler.jsonc` and documented where the secret belongs.
+
 - Added **PrinterService Case Study to the Work Page** (`src/content/projects/printer-service.md`, `public/images/projects/printer-service/hero.svg`):
   - New projects collection entry rendering in the "All projects archive" list (`featured: false`, `status: active`, `category: systems`) with a hover/tap peek preview window and a full case study at `/projects/printer-service`.
   - Case study documents the self-hosted FastAPI print server that turns a USB-only Epson L3210 into a wireless LAN printer: the PDF normalization pipeline (Pillow / LibreOffice / ReportLab / SumatraPDF pass-through), SQLite job lifecycle with pre-flight spooler health checks, LAN-only security, and the 190+ test suite.
