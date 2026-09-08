@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Added **PrinterService Case Study to the Work Page** (`src/content/projects/printer-service.md`, `public/images/projects/printer-service/hero.svg`):
+  - New projects collection entry rendering in the "All projects archive" list (`featured: false`, `status: active`, `category: systems`) with a hover/tap peek preview window and a full case study at `/projects/printer-service`.
+  - Case study documents the self-hosted FastAPI print server that turns a USB-only Epson L3210 into a wireless LAN printer: the PDF normalization pipeline (Pillow / LibreOffice / ReportLab / SumatraPDF pass-through), SQLite job lifecycle with pre-flight spooler health checks, LAN-only security, and the 190+ test suite.
+  - Added hero banner (`hero.svg`) composed from the project's official horizontal lockup logo, scaled onto an opaque paper background for legibility across light and dark themes.
+  - Full verification suite passed: format, lint, check, build, `test:e2e` (146 passed / 4 skipped), and `test:a11y` (40/40).
+
 - Removed **Viber contact channel and phone number** (`src/content/data/site.json`, `src/pages/contact.astro`, `PRODUCT.md`): dropped the `viber` social link, the Direct Lines Viber row, and the phone number from all rendered surfaces and product truth; contact is now email + contact form only.
 
 - Hardened & Polished **Contact Form Validation, States & Test Coverage** (`src/pages/contact.astro`, `tests/e2e/contact.spec.ts`) — Step 3 of the Contact page redesign:
