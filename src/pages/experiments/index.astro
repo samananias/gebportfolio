@@ -1,25 +1,243 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import UnderConstruction from "../../components/UnderConstruction.astro";
+import Container from "../../components/primitives/Container.astro";
+import Grid from "../../components/primitives/Grid.astro";
+import Card from "../../components/primitives/Card.astro";
+import { getCollection } from "astro:content";
+import { Beaker, ExternalLink } from "@lucide/astro";
 
 /**
- * Lab / Experiments — temporarily paused.
- * Original implementation preserved at src/content/_archive/experiments-index.astro.
+ * Lab / Experiments — live listing restored from
+ * src/content/_archive/experiments-index.astro when ID Photo Studio shipped.
  */
+
+// Fetch experiments from content collection
+const experiments = await getCollection("experiments");
+
+// Extract unique technologies for filters
+const technologies = Array.from(
+  new Set(experiments.flatMap((exp) => exp.data.technologies ?? []))
+).sort();
+
+// Status display configuration helper
+const statusStyles = {
+  active: "bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border-emerald-500/20",
+  completed: "bg-blue-500/10 text-blue-800 dark:text-blue-400 border-blue-500/20",
+  abandoned: "bg-slate-500/10 text-slate-800 dark:text-slate-400 border-slate-500/20",
+};
+
+const statusDotStyles = {
+  active: "bg-emerald-500",
+  completed: "bg-blue-500",
+  abandoned: "bg-slate-500",
+};
 ---
 
 <BaseLayout
-  title="Lab & Experiments"
-  description="Sandbox prototypes, UI stress tests, and systems mockups — in development."
+  title="Lab"
+  description="Technical explorations, UI experiments, and systems design prototypes."
 >
-  <UnderConstruction
-    eyebrow="Lab · Paused"
-    title="This section is being built."
-    summary="The lab bench is empty right now — and deliberately so. Experiments earn their listing when they can answer a specific question."
-    description="When this reopens, expect work-in-progress prototypes, viewport stress tests, and half-formed components with architectural disclaimers attached. Until then, nothing here makes a claim it cannot back."
-    piece="rook"
-    eta="Under construction · bench cleared for the next experiment"
-    cta={{ label: "Back to home", href: "/" }}
-    secondaryCta={{ label: "View shipped work", href: "/projects" }}
-  />
+  <Container width="default" class="animate-reveal space-y-12 py-12">
+    <!-- Header -->
+    <header class="border-border-custom space-y-3 border-b pb-6">
+      <div class="text-primary flex items-center gap-2">
+        <Beaker class="size-6" />
+        <span class="text-caption font-mono font-bold tracking-wider uppercase"
+          >Experimental Workspace</span
+        >
+      </div>
+      <h1 class="text-h1 font-display text-text font-bold tracking-tight">The Laboratory</h1>
+      <p class="text-body-large text-text-muted max-w-2xl leading-relaxed">
+        Isolated sandbox prototypes, system design mockups, and interface behavior tests with
+        architectural disclaimers.
+      </p>
+    </header>
+
+    <!-- Filters Section -->
+    <div class="space-y-6">
+      <!-- Status Filters -->
+      <div class="space-y-2">
+        <h4 class="text-caption text-text font-mono font-semibold tracking-wider uppercase">
+          Status
+        </h4>
+        <div class="flex flex-wrap gap-2" id="status-filters">
+          <button
+            data-status-filter="all"
+            class="text-small duration-fast bg-primary text-bg cursor-pointer rounded-full px-4 py-1.5 font-medium shadow-sm transition-all"
+          >
+            All Statuses
+          </button>
+          <button
+            data-status-filter="active"
+            class="text-small duration-fast bg-surface-subtle border-border-custom text-text-muted hover:text-text cursor-pointer rounded-full border px-4 py-1.5 font-medium transition-all"
+          >
+            Active
+          </button>
+          <button
+            data-status-filter="completed"
+            class="text-small duration-fast bg-surface-subtle border-border-custom text-text-muted hover:text-text cursor-pointer rounded-full border px-4 py-1.5 font-medium transition-all"
+          >
+            Completed
+          </button>
+          <button
+            data-status-filter="abandoned"
+            class="text-small duration-fast bg-surface-subtle border-border-custom text-text-muted hover:text-text cursor-pointer rounded-full border px-4 py-1.5 font-medium transition-all"
+          >
+            Abandoned
+          </button>
+        </div>
+      </div>
+
+      <!-- Technology Filters -->
+      {
+        technologies.length > 0 && (
+          <div class="space-y-2">
+            <h4 class="text-caption text-text font-mono font-semibold tracking-wider uppercase">
+              Technologies
+            </h4>
+            <div class="flex flex-wrap gap-2" id="tech-filters">
+              <button
+                data-tech-filter="all"
+                class="text-small duration-fast bg-primary text-bg cursor-pointer rounded-full px-4 py-1.5 font-medium shadow-sm transition-all"
+              >
+                All Tech
+              </button>
+              {technologies.map((tech) => (
+                <button
+                  data-tech-filter={tech}
+                  class="text-small duration-fast bg-surface-subtle border-border-custom text-text-muted hover:text-text cursor-pointer rounded-full border px-4 py-1.5 font-medium transition-all"
+                >
+                  {tech}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      }
+    </div>
+
+    <!-- Grid List -->
+    {
+      experiments.length === 0 ? (
+        <div class="border-border-custom rounded-xl border p-12 text-center">
+          <p class="text-text-muted">No experiments seeded yet. Check back soon!</p>
+        </div>
+      ) : (
+        <Grid cols="1 md:2" gap="8" id="experiments-grid">
+          {experiments.map((exp) => (
+            <div
+              data-experiment-card
+              data-status={exp.data.status}
+              data-technologies={exp.data.technologies ? exp.data.technologies.join(",") : ""}
+              class="duration-normal transition-all"
+            >
+              <Card href={`/experiments/${exp.id}`}>
+                <div slot="eyebrow" class="flex items-center gap-2">
+                  <span
+                    class={`text-caption inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-semibold tracking-wide uppercase ${statusStyles[exp.data.status]}`}
+                  >
+                    <span class={`h-1.5 w-1.5 rounded-full ${statusDotStyles[exp.data.status]}`} />
+                    {exp.data.status}
+                  </span>
+                </div>
+
+                <span slot="title">{exp.data.title}</span>
+
+                {exp.data.warning && (
+                  <p
+                    slot="summary"
+                    class="text-caption rounded-md border border-amber-500/10 bg-amber-500/5 p-2.5 text-amber-800 italic dark:text-amber-400"
+                  >
+                    Note: {exp.data.warning}
+                  </p>
+                )}
+
+                {exp.data.technologies && exp.data.technologies.length > 0 && (
+                  <div slot="metadata" class="flex flex-wrap gap-1.5">
+                    {exp.data.technologies.map((tech) => (
+                      <span class="bg-surface-subtle border-border-custom text-caption text-text-muted rounded border px-2 py-0.5 font-medium">
+                        {tech}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {exp.data.demoLinks && exp.data.demoLinks.length > 0 && (
+                  <div slot="actions" class="flex gap-4">
+                    {exp.data.demoLinks.map((link) => (
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-small text-primary hover:text-primary-hover flex items-center gap-1 font-semibold transition-colors focus-visible:underline"
+                      >
+                        {link.label}
+                        <ExternalLink class="size-3" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          ))}
+        </Grid>
+      )
+    }
+  </Container>
+
+  <!-- Client-side filtering script -->
+  <script is:inline>
+    (() => {
+      let currentStatus = "all";
+      let currentTech = "all";
+
+      const statusButtons = document.querySelectorAll("[data-status-filter]");
+      const techButtons = document.querySelectorAll("[data-tech-filter]");
+      const cards = document.querySelectorAll("[data-experiment-card]");
+
+      const inactiveButtonClass =
+        "text-small duration-fast bg-surface-subtle border-border-custom text-text-muted hover:text-text cursor-pointer rounded-full border px-4 py-1.5 font-medium transition-all";
+      const activeButtonClass =
+        "text-small duration-fast bg-primary cursor-pointer rounded-full px-4 py-1.5 font-medium text-bg shadow-sm transition-all";
+
+      const applyFilters = () => {
+        cards.forEach((card) => {
+          const cardStatus = card.getAttribute("data-status") || "";
+          const techsStr = card.getAttribute("data-technologies") || "";
+          const cardTechs = techsStr.split(",").filter(Boolean);
+
+          const matchesStatus = currentStatus === "all" || cardStatus === currentStatus;
+          const matchesTech = currentTech === "all" || cardTechs.includes(currentTech);
+
+          if (matchesStatus && matchesTech) {
+            card.classList.remove("hidden");
+          } else {
+            card.classList.add("hidden");
+          }
+        });
+      };
+
+      statusButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          currentStatus = btn.getAttribute("data-status-filter");
+          statusButtons.forEach((b) => {
+            b.className = inactiveButtonClass;
+          });
+          btn.className = activeButtonClass;
+          applyFilters();
+        });
+      });
+
+      techButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          currentTech = btn.getAttribute("data-tech-filter");
+          techButtons.forEach((b) => {
+            b.className = inactiveButtonClass;
+          });
+          btn.className = activeButtonClass;
+          applyFilters();
+        });
+      });
+    })();
+  </script>
 </BaseLayout>
