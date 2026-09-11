@@ -68,6 +68,59 @@ export function clampPanOffset(
   };
 }
 
+/**
+ * Sampled square side in natural image pixels at a given zoom.
+ *
+ * `zoom = 1` is the "cover" fit: the image's shorter side exactly spans
+ * the fixed frame (the largest centered square). `zoom > 1` enlarges the
+ * image underneath the fixed frame, so the sampled region shrinks —
+ * zoom is a composition control, not a screen magnifier. Values below 1
+ * are invalid (the image could not cover the frame).
+ *
+ * @param minSide - Shorter natural side of the image in pixels
+ * @param zoom - Zoom multiplier (>= 1)
+ * @returns Sampled square side in natural image pixels
+ *
+ * @example
+ * ```typescript
+ * sampledSizeForZoom(3000, 2); // 1500 — the frame now covers half the side
+ * ```
+ */
+export function sampledSizeForZoom(minSide: number, zoom: number): number {
+  return minSide / Math.max(1, zoom);
+}
+
+/**
+ * Re-derives the frame box after a zoom change, keeping the frame's
+ * center anchored: zooming enlarges the image around the currently
+ * framed content instead of jumping to the top-left corner. The result
+ * is re-clamped so the coverage invariant still holds.
+ *
+ * @param imageWidth - Natural image width in pixels
+ * @param imageHeight - Natural image height in pixels
+ * @param current - Frame box at the previous zoom
+ * @param zoom - New zoom multiplier (>= 1)
+ * @returns Re-centered, clamped frame box at the new zoom
+ */
+export function repanForZoom(
+  imageWidth: number,
+  imageHeight: number,
+  current: FrameBox,
+  zoom: number
+): FrameBox {
+  const size = sampledSizeForZoom(Math.min(imageWidth, imageHeight), zoom);
+  const centerX = current.x + current.size / 2;
+  const centerY = current.y + current.size / 2;
+  const clamped = clampPanOffset(
+    imageWidth,
+    imageHeight,
+    size,
+    centerX - size / 2,
+    centerY - size / 2
+  );
+  return { x: clamped.x, y: clamped.y, size };
+}
+
 export interface GuideEllipse {
   /** Center x in frame-relative units (0 = left edge, 1 = right edge). */
   cx: number;

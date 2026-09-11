@@ -63,8 +63,14 @@ export async function fitWithinCap(img: HTMLImageElement, cap: number): Promise<
   canvas.height = Math.round(img.naturalHeight * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return img;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return loadImage(canvas.toDataURL("image/png"));
+  // Blob URL instead of a data URL: one re-encode, no multi-megabyte
+  // string, no second decode penalty.
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) return loadImage(canvas.toDataURL("image/png"));
+  return loadImage(URL.createObjectURL(blob));
 }
 
 /**

@@ -9,7 +9,12 @@ import {
   type IdPresetId,
 } from "../../lib/crop/presets";
 import { validateExportOpts, validateFileMeta } from "../../lib/crop/validation";
-import { clampPanOffset, faceGuideForPreset, initialFrame } from "../../lib/crop/geometry";
+import {
+  clampPanOffset,
+  faceGuideForPreset,
+  initialFrame,
+  repanForZoom,
+} from "../../lib/crop/geometry";
 import {
   fitWithinCap,
   loadImage,
@@ -106,9 +111,14 @@ export default function CropStudio() {
       ctx.fillStyle = bgValue;
       ctx.fillRect(0, 0, stage, stage);
     }
-    const fitScale = (stage / Math.max(img.naturalWidth, img.naturalHeight)) * zoom;
-    // Pan offset: frame origin relative to the image origin, in natural
-    // pixels. The fixed frame is derived from it.
+    // Zoom scales ONLY the image; the frame is pinned to the stage and the
+    // guide stays fixed relative to it. zoom = 1 is the cover fit (the
+    // image's shorter side exactly spans the stage), so what the stage
+    // shows is exactly what handleExport samples.
+    const minSide = Math.min(img.naturalWidth, img.naturalHeight);
+    const imageScale = (stage / minSide) * zoom;
+    // Pan offset: sampled-region origin relative to the image origin, in
+    // natural pixels. The stage (the frame) always displays the box region.
     const clamped = clampPanOffset(
       img.naturalWidth,
       img.naturalHeight,
@@ -116,23 +126,21 @@ export default function CropStudio() {
       current.x,
       current.y
     );
-    const dw = img.naturalWidth * fitScale;
-    const dh = img.naturalHeight * fitScale;
-    const ox = stage / 2 - (current.size * fitScale) / 2 - clamped.x * fitScale;
-    const oy = stage / 2 - (current.size * fitScale) / 2 - clamped.y * fitScale;
-    viewRef.current.fitScale = fitScale;
-    ctx.drawImage(img, ox, oy, dw, dh);
-    const bx = (stage - current.size * fitScale) / 2;
-    const by = (stage - current.size * fitScale) / 2;
-    const bs = current.size * fitScale;
-    ctx.fillStyle = "rgba(15, 12, 10, 0.55)";
-    ctx.fillRect(0, 0, stage, by);
-    ctx.fillRect(0, by + bs, stage, stage - by - bs);
-    ctx.fillRect(0, by, bx, bs);
-    ctx.fillRect(bx + bs, by, stage - bx - bs, bs);
-    ctx.strokeStyle = "#f8f7f5";
+    viewRef.current.fitScale = imageScale;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(
+      img,
+      -clamped.x * imageScale,
+      -clamped.y * imageScale,
+      img.naturalWidth * imageScale,
+      img.naturalHeight * imageScale
+    );
+    // The stage itself is the frame: a hairline inset border marks it, then
+    // the preview-only face-placement guide anchors to the same square.
+    ctx.strokeStyle = "rgba(15, 12, 10, 0.55)";
     ctx.lineWidth = 2;
-    ctx.strokeRect(bx, by, bs, bs);
+    ctx.strokeRect(1, 1, stage - 2, stage - 2);
     // Preview-only face-placement guide: head oval plus shoulder line.
     // Never drawn in handleExport — the exported file keeps source
     // pixels only.
@@ -144,18 +152,18 @@ export default function CropStudio() {
       ctx.setLineDash([6, 4]);
       ctx.beginPath();
       ctx.ellipse(
-        bx + guide.head.cx * bs,
-        by + guide.head.cy * bs,
-        guide.head.rx * bs,
-        guide.head.ry * bs,
+        guide.head.cx * stage,
+        guide.head.cy * stage,
+        guide.head.rx * stage,
+        guide.head.ry * stage,
         0,
         0,
         Math.PI * 2
       );
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(bx + guide.shoulders.x1 * bs, by + guide.shoulders.y1 * bs);
-      ctx.lineTo(bx + guide.shoulders.x2 * bs, by + guide.shoulders.y2 * bs);
+      ctx.moveTo(guide.shoulders.x1 * stage, guide.shoulders.y1 * stage);
+      ctx.lineTo(guide.shoulders.x2 * stage, guide.shoulders.y2 * stage);
       ctx.stroke();
       ctx.restore();
     }
@@ -316,6 +324,18 @@ export default function CropStudio() {
 
   const endDrag = useCallback(() => setDragging(false), []);
 
+  // Zoom scales only the image under the fixed frame — the frame and face
+  // guide never move or resize. The frame's center stays anchored, so the
+  // image enlarges around the framed content, and the box is re-clamped so
+  // the coverage invariant still holds at any zoom.
+  const onZoomChange = useCallback((next: number) => {
+    setZoom(next);
+    const img = cutoutRef.current ?? sourceRef.current;
+    const current = boxRef.current;
+    if (!img || !current) return;
+    setBox(repanForZoom(img.naturalWidth, img.naturalHeight, current, next));
+  }, []);
+
   const onFrameKeyDown = useCallback((event: React.KeyboardEvent<HTMLCanvasElement>) => {
     const current = boxRef.current;
     const img = cutoutRef.current ?? sourceRef.current;
@@ -351,6 +371,8 @@ export default function CropStudio() {
     out.height = target;
     const ctx = out.getContext("2d");
     if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     const bgValue = BG_SWATCH[bg];
     if (format === "image/jpeg" || bgValue !== "transparent") {
       ctx.fillStyle = bgValue === "transparent" ? "#ffffff" : bgValue;
@@ -450,8 +472,8 @@ export default function CropStudio() {
           {status}
         </p>
         <p className="text-small text-text-muted mt-2 leading-relaxed">
-          Drag the photo to position the face inside the fixed square. The exported file matches the
-          framed view.
+          Drag the photo and zoom it under the fixed square until the face fits the guide. The
+          exported file matches the framed view exactly.
         </p>
         {error && (
           <p
@@ -484,20 +506,26 @@ export default function CropStudio() {
                   htmlFor="crop-zoom"
                   className="text-caption text-text-muted font-mono font-semibold tracking-wider uppercase"
                 >
-                  Preview zoom
+                  Image zoom
                 </label>
                 <input
                   id="crop-zoom"
                   type="range"
                   min={1}
-                  max={2.5}
+                  max={4}
                   step={0.05}
                   value={zoom}
-                  onChange={(event) => setZoom(Number(event.target.value))}
+                  onChange={(event) => onZoomChange(Number(event.target.value))}
                   className="w-full"
                 />
                 <span className="text-caption text-text-muted font-mono">{zoom.toFixed(2)}x</span>
               </div>
+              {zoom > 1 && box && box.size < exportSize && (
+                <p className="text-caption text-text-muted mt-2 leading-relaxed">
+                  Zoomed past the photo&rsquo;s resolution — the export is enlarged and may look
+                  soft.
+                </p>
+              )}
               <div className="mt-3 flex items-center justify-between gap-3">
                 <label
                   htmlFor="crop-guide"

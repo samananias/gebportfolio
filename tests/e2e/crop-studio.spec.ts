@@ -158,4 +158,27 @@ test.describe("ID Photo Studio frontend", () => {
     const withoutGuide = await download.getAttribute("href");
     expect(withoutGuide).toBe(withGuide);
   });
+
+  test("image zoom changes the exported framing and flags upscaling", async ({ page }) => {
+    // Two-tone square: at zoom 1 the frame covers the whole image; zooming
+    // in must sample a smaller region underneath the fixed frame and change
+    // the export bytes (today's view-magnifier zoom cannot).
+    const pngBuffer = buildSplitPng(128, 128);
+    await page.locator("#crop-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Portrait loaded.")).toBeVisible();
+    await page.getByRole("button", { name: "Export 2x2 photo" }).click();
+    const download = page.locator('a[download="id-photo-2x2.png"]');
+    await expect(download).toBeVisible();
+    const before = await download.getAttribute("href");
+    await page.locator("#crop-zoom").fill("2");
+    await page.getByRole("button", { name: "Export 2x2 photo" }).click();
+    await expect.poll(async () => download.getAttribute("href")).not.toBe(before);
+    // A 128px source zoomed 2x samples 64px < the 600px target: the
+    // softness is disclosed in the UI, never hidden.
+    await expect(page.getByText(/Zoomed past the photo/)).toBeVisible();
+  });
 });
