@@ -12,6 +12,8 @@ Manage the background server with `astro dev stop`, `astro dev status`, and `ast
 
 When executing terminal commands on Windows, always wrap commands with `cmd /c` (e.g. `cmd /c "npx pnpm run format"`) to bypass PowerShell script execution policy restrictions (`.ps1` disabled), unless another terminal is explicitly required.
 
+**Git Bash exception:** when the active terminal is Git Bash, do NOT use `cmd /c` or `cmd //c` — run commands directly (e.g. `npx pnpm run format`). The `cmd` wrapper is PowerShell-only; in Git Bash/MSYS2 it mangles `/`-prefixed args and can silently open an interactive session that exits 0 without running anything.
+
 ## Definition of Done
 
 Before considering a task completed, run the full verification suite in order:

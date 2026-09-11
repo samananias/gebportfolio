@@ -41,6 +41,7 @@ CI enforces this same sequence plus a Lighthouse performance budget check on eve
 ### 6. Terminal & Command Execution Rule
 
 - Always wrap CLI commands on Windows with `cmd /c` (e.g. `cmd /c "npx pnpm run format"`) to bypass PowerShell script execution policy restrictions (`.ps1` disabled), unless another terminal is explicitly requested.
+- **Git Bash exception:** when the active terminal is Git Bash, do NOT use `cmd /c` or `cmd //c` — run commands directly (e.g. `npx pnpm run format`). The `cmd` wrapper is PowerShell-only.
 
 ### 7. Emoji & UI Icon Rule
 

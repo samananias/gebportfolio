@@ -27,17 +27,17 @@ Create a commit message that is:
    - `.gitmessage`
    - Other repository-specific instructions
 2. Inspect the repository state:
-   - On Windows, always wrap shell commands with `cmd /c` (e.g. `cmd /c "git status --short"`).
+   - PowerShell on Windows: wrap shell commands with cmd /c. Git Bash: run commands directly — never use cmd /c or cmd //c there.
 
    ```bash
-   cmd /c "git status --short"
+   git status --short
    ```
 
 3. **STRICT GUARD: Inspect Staged Changes ONLY**:
 
    ```bash
-   cmd /c "git diff --cached --stat"
-   cmd /c "git diff --cached"
+   git diff --cached --stat
+   git diff --cached
    ```
 
    - **Strict Requirement**: Generate commit messages **ONLY for staged changes** (`git diff --cached`).
@@ -48,13 +48,13 @@ Create a commit message that is:
    - If temporary or non-essential files are staged, flag them in an advisory note and provide the unstage command:
 
    ```bash
-   cmd /c "git restore --staged <unimportant-files>"
+   git restore --staged <unimportant-files>
    ```
 
 5. Review recent commit messages to align with the repository's existing style:
 
    ```bash
-   cmd /c "git log -10 --oneline"
+   git log -10 --oneline
    ```
 
 6. Identify:
@@ -175,7 +175,7 @@ Return:
 When temporary or non-essential files are detected in the staged index, add an advisory note:
 
 > **Advisory**: The following staged files appear to be temporary artifacts or non-essential files and should be unstaged before committing:
-> `cmd /c "git restore --staged <unimportant-files>"`
+> `git restore --staged <unimportant-files>`
 
 When useful, also include a short verification section:
 
