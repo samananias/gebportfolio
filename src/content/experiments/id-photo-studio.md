@@ -10,6 +10,8 @@ technologies:
 demoLinks:
   - label: "Open ID Photo Tool"
     url: "https://samananias.is-a.dev/crop"
+  - label: "Remove Only Page"
+    url: "https://samananias.is-a.dev/remove-background"
 ---
 
 ## Overview

@@ -9,9 +9,17 @@ import {
   type IdPresetId,
 } from "../../lib/crop/presets";
 import { validateExportOpts, validateFileMeta } from "../../lib/crop/validation";
+import { clampPanOffset, faceGuideForPreset, initialFrame } from "../../lib/crop/geometry";
+import {
+  fitWithinCap,
+  loadImage,
+  removeBackgroundInBrowser,
+  type RemovalProgress,
+} from "../../lib/crop/removal";
 
 type Stage = "idle" | "ready" | "removing" | "removed";
 
+/** Exported square in natural image pixels; the fixed frame samples it. */
 interface CropBox {
   x: number;
   y: number;
@@ -30,28 +38,6 @@ const BG_LABEL: Record<BgOption, string> = {
   transparent: "Transparent",
 };
 
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("The photo could not be read."));
-    img.src = url;
-  });
-}
-
-async function fitWithinCap(img: HTMLImageElement, cap: number): Promise<HTMLImageElement> {
-  const longest = Math.max(img.naturalWidth, img.naturalHeight);
-  if (longest <= cap) return img;
-  const scale = cap / longest;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.naturalWidth * scale);
-  canvas.height = Math.round(img.naturalHeight * scale);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return img;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return loadImage(canvas.toDataURL("image/png"));
-}
-
 export default function CropStudio() {
   const [stage, setStage] = useState<Stage>("idle");
   const [status, setStatus] = useState("Choose a portrait to begin. JPEG or PNG, up to 8 MB.");
@@ -61,6 +47,7 @@ export default function CropStudio() {
   const [format] = useState<string>("image/png");
   const [progress, setProgress] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [showGuide, setShowGuide] = useState(true);
   const [box, setBox] = useState<CropBox | null>(null);
   const [dragging, setDragging] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -68,12 +55,16 @@ export default function CropStudio() {
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const guideRef = useRef(true);
+  const presetRef = useRef<IdPresetId>("2x2");
   const sourceRef = useRef<HTMLImageElement | null>(null);
   const cutoutRef = useRef<HTMLImageElement | null>(null);
   const viewRef = useRef({ fitScale: 1 });
   const boxRef = useRef<CropBox | null>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   boxRef.current = box;
+  guideRef.current = showGuide;
+  presetRef.current = presetId;
 
   // Hydration signal so E2E/render tests can wait for the island's event
   // handlers to be attached before driving the file input.
@@ -83,10 +74,11 @@ export default function CropStudio() {
 
   const announce = useCallback((message: string) => setStatus(message), []);
 
-  // The canvas is a square stage (matching its CSS aspect-ratio) with the
-  // portrait letterboxed inside it. Every screen coordinate flows through
-  // fitScale so the overlay square is really square on screen — the same
-  // geometry handleExport samples, so the preview never misleads.
+  // The canvas is a square stage (matching its CSS aspect-ratio). The crop
+  // frame is fixed and centered; the photo pans underneath it. Every
+  // screen coordinate flows through fitScale so the overlay square is
+  // really square on screen — the same geometry handleExport samples, so
+  // the preview never misleads.
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const img = cutoutRef.current ?? sourceRef.current;
@@ -115,14 +107,23 @@ export default function CropStudio() {
       ctx.fillRect(0, 0, stage, stage);
     }
     const fitScale = (stage / Math.max(img.naturalWidth, img.naturalHeight)) * zoom;
+    // Pan offset: frame origin relative to the image origin, in natural
+    // pixels. The fixed frame is derived from it.
+    const clamped = clampPanOffset(
+      img.naturalWidth,
+      img.naturalHeight,
+      current.size,
+      current.x,
+      current.y
+    );
     const dw = img.naturalWidth * fitScale;
     const dh = img.naturalHeight * fitScale;
-    const ox = (stage - dw) / 2;
-    const oy = (stage - dh) / 2;
+    const ox = stage / 2 - (current.size * fitScale) / 2 - clamped.x * fitScale;
+    const oy = stage / 2 - (current.size * fitScale) / 2 - clamped.y * fitScale;
     viewRef.current.fitScale = fitScale;
     ctx.drawImage(img, ox, oy, dw, dh);
-    const bx = ox + current.x * fitScale;
-    const by = oy + current.y * fitScale;
+    const bx = (stage - current.size * fitScale) / 2;
+    const by = (stage - current.size * fitScale) / 2;
     const bs = current.size * fitScale;
     ctx.fillStyle = "rgba(15, 12, 10, 0.55)";
     ctx.fillRect(0, 0, stage, by);
@@ -132,11 +133,37 @@ export default function CropStudio() {
     ctx.strokeStyle = "#f8f7f5";
     ctx.lineWidth = 2;
     ctx.strokeRect(bx, by, bs, bs);
+    // Preview-only face-placement guide: head oval plus shoulder line.
+    // Never drawn in handleExport — the exported file keeps source
+    // pixels only.
+    if (guideRef.current) {
+      const guide = faceGuideForPreset(presetRef.current);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.ellipse(
+        bx + guide.head.cx * bs,
+        by + guide.head.cy * bs,
+        guide.head.rx * bs,
+        guide.head.ry * bs,
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx + guide.shoulders.x1 * bs, by + guide.shoulders.y1 * bs);
+      ctx.lineTo(bx + guide.shoulders.x2 * bs, by + guide.shoulders.y2 * bs);
+      ctx.stroke();
+      ctx.restore();
+    }
   }, [bg, zoom]);
 
   useEffect(() => {
     draw();
-  }, [draw, box, presetId]);
+  }, [draw, box, presetId, showGuide]);
 
   // Keep the backing buffer matched to the layout when the stage resizes,
   // otherwise the preview blurs and the drag mapping drifts.
@@ -188,15 +215,10 @@ export default function CropStudio() {
         const fitted = await fitWithinCap(probe, EXPORT.maxInputDimensionPx);
         sourceRef.current = fitted;
         cutoutRef.current = null;
-        const side = Math.min(fitted.naturalWidth, fitted.naturalHeight);
-        setBox({
-          x: (fitted.naturalWidth - side) / 2,
-          y: (fitted.naturalHeight - side) / 2,
-          size: side,
-        });
+        setBox(initialFrame(fitted.naturalWidth, fitted.naturalHeight));
         setZoom(1);
         setStage("ready");
-        announce("Portrait loaded. Remove the background, then drag the square to frame the face.");
+        announce("Portrait loaded. Remove the background, then drag the photo to frame the face.");
       } catch {
         setError("The photo could not be read. Try another file.");
       }
@@ -211,40 +233,32 @@ export default function CropStudio() {
     setStage("removing");
     setProgress(0);
     announce("Downloading the on-device model on first run, then cutting out the portrait.");
-    const startedAt = performance.now();
-    try {
-      const { removeBackground } = await import("@imgly/background-removal");
-      const blob = await removeBackground(source.src, {
-        progress: (key: string, current: number, total: number) => {
-          if (key.startsWith("fetch:") && total > 0) {
-            setProgress(Math.round((current / total) * 100));
-          }
-        },
-      });
-      cutoutRef.current = await loadImage(URL.createObjectURL(blob));
-      setProgress(null);
-      setStage("removed");
-      draw();
-      announce("Background removed on your device. Adjust the frame, then export.");
-      try {
-        await fetch("/api/crop/usage", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event: "removal_succeeded",
-            preset: presetId,
-            ms: Math.round(performance.now() - startedAt),
-          }),
-        });
-      } catch {
-        // Telemetry is best-effort.
-      }
-    } catch {
-      setProgress(null);
+    const result = await removeBackgroundInBrowser(source.src, (p: RemovalProgress) => {
+      if (p.total > 0) setProgress(Math.round((p.current / p.total) * 100));
+    });
+    setProgress(null);
+    if (!result.ok) {
       setStage("ready");
-      const message = "Background removal failed. You can still frame and export the original.";
-      setError(message);
-      announce(message);
+      setError(result.error);
+      announce(result.error);
+      return;
+    }
+    cutoutRef.current = await loadImage(URL.createObjectURL(result.blob));
+    setStage("removed");
+    draw();
+    announce("Background removed on your device. Adjust the framing, then export.");
+    try {
+      await fetch("/api/crop/usage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: "removal_succeeded",
+          preset: presetId,
+          ms: result.ms,
+        }),
+      });
+    } catch {
+      // Telemetry is best-effort.
     }
   }, [announce, draw, presetId]);
 
@@ -286,15 +300,16 @@ export default function CropStudio() {
         | null;
       const origin = holder?.dragOrigin;
       if (!canvas || !current || !img || !origin || !dragging) return;
-      const nextX = Math.min(
-        Math.max(0, origin.boxX + (event.clientX - origin.startX) * origin.scale),
-        img.naturalWidth - current.size
+      // Dragging right moves the photo right, so the frame samples further
+      // left: subtract the screen delta (converted to natural pixels).
+      const clamped = clampPanOffset(
+        img.naturalWidth,
+        img.naturalHeight,
+        current.size,
+        origin.boxX - (event.clientX - origin.startX) * origin.scale,
+        origin.boxY - (event.clientY - origin.startY) * origin.scale
       );
-      const nextY = Math.min(
-        Math.max(0, origin.boxY + (event.clientY - origin.startY) * origin.scale),
-        img.naturalHeight - current.size
-      );
-      setBox({ ...current, x: nextX, y: nextY });
+      setBox({ ...current, x: clamped.x, y: clamped.y });
     },
     [dragging]
   );
@@ -306,16 +321,18 @@ export default function CropStudio() {
     const img = cutoutRef.current ?? sourceRef.current;
     if (!current || !img) return;
     const step = event.shiftKey ? 20 : 4;
-    const next = { ...current };
-    if (event.key === "ArrowLeft") next.x = Math.max(0, current.x - step);
-    else if (event.key === "ArrowRight")
-      next.x = Math.min(img.naturalWidth - current.size, current.x + step);
-    else if (event.key === "ArrowUp") next.y = Math.max(0, current.y - step);
-    else if (event.key === "ArrowDown")
-      next.y = Math.min(img.naturalHeight - current.size, current.y + step);
+    // Arrow keys move the photo; the frame stays fixed. Pressing Right
+    // slides the photo right, so the frame samples further left.
+    let panX = current.x;
+    let panY = current.y;
+    if (event.key === "ArrowLeft") panX = current.x + step;
+    else if (event.key === "ArrowRight") panX = current.x - step;
+    else if (event.key === "ArrowUp") panY = current.y + step;
+    else if (event.key === "ArrowDown") panY = current.y - step;
     else return;
     event.preventDefault();
-    setBox(next);
+    const clamped = clampPanOffset(img.naturalWidth, img.naturalHeight, current.size, panX, panY);
+    setBox({ ...current, x: clamped.x, y: clamped.y });
   }, []);
 
   const handleExport = useCallback(async () => {
@@ -432,6 +449,10 @@ export default function CropStudio() {
         >
           {status}
         </p>
+        <p className="text-small text-text-muted mt-2 leading-relaxed">
+          Drag the photo to position the face inside the fixed square. The exported file matches the
+          framed view.
+        </p>
         {error && (
           <p
             role="alert"
@@ -450,7 +471,7 @@ export default function CropStudio() {
                 className="border-border-custom w-full cursor-move touch-none rounded-md border"
                 style={{ aspectRatio: "1 / 1" }}
                 role="application"
-                aria-label="Crop frame. Drag to move the square, or focus and use arrow keys."
+                aria-label="Crop frame. Drag to move the photo, or focus and use arrow keys."
                 tabIndex={0}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
@@ -477,6 +498,28 @@ export default function CropStudio() {
                 />
                 <span className="text-caption text-text-muted font-mono">{zoom.toFixed(2)}x</span>
               </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <label
+                  htmlFor="crop-guide"
+                  className="text-caption text-text-muted font-mono font-semibold tracking-wider uppercase"
+                >
+                  Face guide
+                </label>
+                <button
+                  id="crop-guide"
+                  type="button"
+                  role="switch"
+                  aria-checked={showGuide}
+                  onClick={() => setShowGuide((previous) => !previous)}
+                  className="bg-surface-subtle text-text border-structural border-border-custom inline-flex h-8 cursor-pointer items-center rounded-md border px-3 font-sans font-medium"
+                >
+                  {showGuide ? "On" : "Off"}
+                </button>
+              </div>
+              <p className="text-small text-text-muted mt-2 leading-relaxed">
+                Guide only — it never exports. Center the head in the oval with shoulders on the
+                line.
+              </p>
             </div>
             <div className="space-y-5 lg:col-span-2">
               <fieldset>

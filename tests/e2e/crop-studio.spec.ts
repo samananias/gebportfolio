@@ -7,6 +7,22 @@ function buildPng(
   height: number,
   [r, g, b, a]: [number, number, number, number]
 ): Buffer {
+  return buildColoredPng(width, height, () => [r, g, b, a] as [number, number, number, number]);
+}
+
+/** Builds a wide two-tone PNG: red on the left half, blue on the right. */
+function buildSplitPng(width: number, height: number): Buffer {
+  const half = Math.floor(width / 2);
+  return buildColoredPng(width, height, (x) =>
+    x < half ? [200, 30, 30, 255] : [30, 60, 200, 255]
+  );
+}
+
+function buildColoredPng(
+  width: number,
+  height: number,
+  pick: (x: number, y: number) => [number, number, number, number]
+): Buffer {
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
@@ -19,6 +35,7 @@ function buildPng(
     raw[row] = 0; // filter type none
     for (let x = 0; x < width; x++) {
       const p = row + 1 + x * 4;
+      const [r, g, b, a] = pick(x, y);
       raw[p] = r;
       raw[p + 1] = g;
       raw[p + 2] = b;
@@ -94,5 +111,51 @@ test.describe("ID Photo Studio frontend", () => {
     await expect(download).toBeVisible();
     const href = await download.getAttribute("href");
     expect(href).toMatch(/^data:image\/png/);
+  });
+
+  test("keyboard pan changes the exported framing", async ({ page }) => {
+    // Wide two-tone portrait: panning must change which half is sampled.
+    const pngBuffer = buildSplitPng(128, 64);
+    await page.locator("#crop-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Portrait loaded.")).toBeVisible();
+    const canvas = page.locator("#crop-studio canvas").first();
+    await expect(canvas).toBeVisible();
+    await page.getByRole("button", { name: "Export 2x2 photo" }).click();
+    const download = page.locator('a[download="id-photo-2x2.png"]');
+    await expect(download).toBeVisible();
+    const before = await download.getAttribute("href");
+    // Pan the photo with the keyboard: the fixed frame samples new pixels.
+    await canvas.focus();
+    await page.keyboard.press("ArrowRight");
+    await page.getByRole("button", { name: "Export 2x2 photo" }).click();
+    await expect.poll(async () => download.getAttribute("href")).not.toBe(before);
+  });
+
+  test("face guide toggles and never leaks into the export", async ({ page }) => {
+    const pngBuffer = buildPng(64, 64, [200, 30, 30, 255]);
+    await page.locator("#crop-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Portrait loaded.")).toBeVisible();
+    const guideToggle = page.getByRole("switch", { name: "Face guide" });
+    await expect(guideToggle).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText("Guide only — it never exports.")).toBeVisible();
+    await page.getByRole("button", { name: "Export 2x2 photo" }).click();
+    const download = page.locator('a[download="id-photo-2x2.png"]');
+    await expect(download).toBeVisible();
+    const withGuide = await download.getAttribute("href");
+    expect(withGuide).toMatch(/^data:image\/png/);
+    await guideToggle.click();
+    await expect(guideToggle).toHaveAttribute("aria-checked", "false");
+    // Re-export without touching the framing: bytes must be identical.
+    await page.getByRole("button", { name: "Export 2x2 photo" }).click();
+    const withoutGuide = await download.getAttribute("href");
+    expect(withoutGuide).toBe(withGuide);
   });
 });
