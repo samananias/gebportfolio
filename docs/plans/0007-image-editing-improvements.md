@@ -100,7 +100,11 @@ fit versus box-sampled export, and main-thread inference freeze during
   panning the photo under a fixed frame instead of chasing a moving box.
 - **Expected behavior:** the frame is fixed (centered square); the image
   pans horizontally and vertically via pointer drag, single-finger touch
-  drag, and keyboard. Zoom scales the image about the frame center.
+  drag, and keyboard. Zoom scales **only the image** underneath the
+  frame — the frame and face guide never move or resize. (Amended
+  2026-09-11: the original wording let zoom scale the shared fit
+  transform, which magnified frame and guide together — see the Change
+  Log.)
 - **Detailed requirements:**
   - Pan state is stored in natural image pixels (image origin offset
     relative to the frame), separate from zoom; drag maps screen delta
@@ -108,8 +112,14 @@ fit versus box-sampled export, and main-thread inference freeze during
   - Coverage invariant: after every pan, zoom, preset switch, or resize,
     the frame must lie fully inside the image bounds — clamp offsets so no
     empty area appears inside the frame.
-  - Zoom keeps the current `[1, 2.5]` feel; increasing zoom must never
-    break the coverage invariant (re-clamp on change).
+  - Zoom is a composition control, not a screen magnifier (amended
+    2026-09-11): at `zoom = 1` the cover fit holds (the image's shorter
+    side spans the frame); `zoom > 1` shrinks the sampled region
+    (`sampledSizeForZoom`: side = `minSide / zoom`) so the face can grow
+    relative to the guide. Slider range `[1, 4]`; frame center anchored
+    on change; re-clamped on every change. Zooming past the source
+    resolution is allowed and must surface an honest softness note
+    rather than being blocked.
   - Keyboard parity: the canvas keeps `Arrow` = 4 px and `Shift+Arrow` =
     20 px semantics, now moving the image.
   - Pointer and touch share one code path (pointer events plus
@@ -205,8 +215,9 @@ fit versus box-sampled export, and main-thread inference freeze during
 
 ## 7. Edge Cases & Risks
 
-- Portrait narrower than the frame at zoom 1: minimum zoom auto-raises so
-  coverage holds; export unaffected.
+- Zoom 1 always covers (the cover fit pins the image's shorter side to
+  the frame); pan freedom exists only along the longer side until the
+  user zooms in. Export unaffected.
 - Very small source (for example the 64 px test asset): upscale-on-export
   accepted (existing behavior); guide still fits.
 - Oversize upload (over 8 MB or 4000 px side): blocked with existing
@@ -256,6 +267,13 @@ fit versus box-sampled export, and main-thread inference freeze during
 - [ ] Exported `2x2` (600 px) and `1x1` (300 px) files reflect the framed
       view at 390 px and desktop widths.
 - [ ] Existing upload guards and background choices behave as before.
+- [ ] Zoom scales only the image: the frame and guide stay pinned while
+      zooming, and increasing zoom changes the exported framing (asserted
+      by export-byte diff).
+- [ ] Zooming beyond the photo's resolution is allowed; the UI discloses
+      the softness with a visible note and this spec documents the limit.
+- [ ] Zoom and pan never modify the source image; export samples the
+      source at natural coordinates with high smoothing quality.
 
 ### Feature 2 — Face placement guide
 
@@ -277,6 +295,7 @@ fit versus box-sampled export, and main-thread inference freeze during
 
 ## Change Log
 
-| Date       | Change                                                                 |
-| ---------- | ---------------------------------------------------------------------- |
-| 2026-09-11 | Initial draft: Features 1-3 (movable image, face guide, removal page). |
+| Date       | Change                                                                                                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-11 | Initial draft: Features 1-3 (movable image, face guide, removal page).                                                                                                |
+| 2026-09-11 | Amendment (Feature 1): zoom is an image-only composition control — frame and guide pinned, range `[1, 4]`, upscaling allowed with disclosure; quality criteria added. |
