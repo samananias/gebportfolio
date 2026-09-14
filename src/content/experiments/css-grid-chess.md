@@ -1,5 +1,11 @@
 ---
 title: "CSS Grid Chess Layout Motif"
+summary: "Can a chessboard read as structure alone — an 8x8 alternating field — without rendering a single chess piece?"
+objectives:
+  - "Build an 8x8 alternating motif that scales at a perfect 1:1 ratio on any screen."
+  - "Drive square contrast from semantic surface tokens instead of hardcoded colors."
+  - "Keep every interaction adaptive to keyboard focus and reduced-motion preferences."
+keyTakeaway: "Chess-inspired structure can be carried by semantic field contrast and disciplined tokens — no literal board rendering required."
 status: "completed"
 warning: "This is a layout experiment to test responsive aspect-ratio grid overlays and alternating field states. It does not support playable chess logic or stateful game persistence."
 technologies:
@@ -8,7 +14,7 @@ technologies:
   - "Astro"
 demoLinks:
   - label: "View Source"
-    url: "https://github.com"
+    url: "https://github.com/samananias/gebportfolio"
 ---
 
 ## Overview

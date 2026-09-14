@@ -1,139 +1,137 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Container from "../../components/primitives/Container.astro";
+import DoodleIcon from "../../components/ui/DoodleIcon.astro";
+import DividerChessboard from "../../components/primitives/DividerChessboard.astro";
+import LinkButton from "../../components/primitives/LinkButton.astro";
 import { getCollection, render } from "astro:content";
-import { ArrowLeft, Beaker, TriangleAlert, ExternalLink } from "@lucide/astro";
+import type { CollectionEntry } from "astro:content";
+import { formatEntryNumber } from "../../lib/lab/accession";
+import { getLabStampClass } from "../../lib/lab/stamps";
+import { sortExperimentsLedger } from "../../lib/lab/order";
+import { externalLinkAttrs } from "../../lib/lab/links";
+
+type ExperimentEntry = CollectionEntry<"experiments">;
 
 export async function getStaticPaths() {
   const experiments = await getCollection("experiments");
-  return experiments.map((exp) => ({
+  const ordered = sortExperimentsLedger(experiments);
+
+  return ordered.map((exp, index) => ({
     params: { slug: exp.id },
-    props: { exp },
+    props: {
+      exp,
+      prev: ordered[index - 1] ?? null,
+      next: ordered[index + 1] ?? null,
+    },
   }));
 }
 
-const { exp } = Astro.props;
+const {
+  exp,
+  prev = null,
+  next = null,
+} = Astro.props as {
+  exp: ExperimentEntry;
+  prev?: ExperimentEntry | null;
+  next?: ExperimentEntry | null;
+};
 const { Content, headings } = await render(exp);
 
-// Status display configuration helper
-const statusStyles = {
-  active: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
-  completed: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  abandoned: "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20",
-};
-
-const statusDotStyles = {
-  active: "bg-emerald-500",
-  completed: "bg-blue-500",
-  abandoned: "bg-slate-500",
-};
+const statusLabel = exp.data.status === "abandoned" ? "shelved" : exp.data.status;
 ---
 
-<BaseLayout title={exp.data.title} description={`Lab experiment: ${exp.data.title}`}>
-  <Container width="default" class="animate-reveal space-y-12 py-12">
+<BaseLayout
+  title={exp.data.title}
+  description={exp.data.summary ?? `Lab experiment: ${exp.data.title}`}
+>
+  <Container width="default" class="animate-reveal space-y-10 py-10 md:py-14">
     <!-- Back Navigation -->
-    <nav>
+    <div>
       <a
         href="/experiments"
-        class="text-small text-primary hover:text-primary-hover flex items-center gap-1 font-semibold transition-colors focus-visible:underline"
+        class="text-small text-primary hover:text-primary-hover focus-visible:ring-focus focus-visible:ring-offset-bg inline-flex items-center gap-1.5 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
       >
-        <ArrowLeft class="size-4" />
-        Back to Laboratory
+        <DoodleIcon name="arrows/arrow-left" class="size-4" />
+        Back to field ledger
       </a>
-    </nav>
+    </div>
 
-    <!-- Header -->
-    <header class="border-border-custom space-y-6 border-b pb-8">
-      <div class="flex flex-wrap items-center gap-4">
-        <div class="text-text-muted flex items-center gap-1.5">
-          <Beaker class="size-4" />
-          <span class="text-caption font-mono tracking-wider uppercase">Experiment</span>
-        </div>
-        <span
-          class={`inline-flex items-center gap-1.5 border px-2.5 py-0.5 rounded-full text-caption font-semibold tracking-wide uppercase ${statusStyles[exp.data.status]}`}
-        >
-          <span class={`h-1.5 w-1.5 rounded-full ${statusDotStyles[exp.data.status]}`}></span>
-          {exp.data.status}
+    <!-- Entry masthead -->
+    <header class="space-y-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="text-text-muted inline-flex items-center gap-1.5">
+          <DoodleIcon name="health/flask" class="size-4" />
+          <span class="text-caption font-mono font-bold tracking-[0.18em] uppercase">
+            Lab entry
+          </span>
         </span>
+        <span class="text-micro text-text-muted font-mono font-bold tracking-[0.18em] uppercase">
+          {formatEntryNumber(exp.id)}
+        </span>
+        <span class={getLabStampClass(exp.data.status)}>{statusLabel}</span>
       </div>
 
-      <h1 class="text-h1 font-display text-text leading-tight font-extrabold tracking-tight">
+      <h1
+        class="text-h1 font-display text-text leading-tight font-bold tracking-tight text-balance"
+      >
         {exp.data.title}
       </h1>
 
       {
-        exp.data.technologies && exp.data.technologies.length > 0 && (
-          <div class="flex flex-wrap gap-1.5 pt-2">
-            {exp.data.technologies.map((tech) => (
-              <span class="bg-surface-subtle border-border-custom text-caption text-text-muted rounded border px-2.5 py-0.5 font-medium">
-                {tech}
-              </span>
-            ))}
-          </div>
+        exp.data.summary && (
+          <p class="text-body-large font-display text-text max-w-[62ch] leading-snug italic">
+            {exp.data.summary}
+          </p>
         )
       }
+
+      {
+        exp.data.technologies && exp.data.technologies.length > 0 && (
+          <ul class="flex flex-wrap gap-1.5 pt-1" aria-label="Apparatus">
+            {exp.data.technologies.map((tech) => (
+              <li class="bg-surface-subtle border-border-custom text-caption text-text-muted rounded-sm border px-2.5 py-0.5 font-medium">
+                {tech}
+              </li>
+            ))}
+          </ul>
+        )
+      }
+
+      <div class="bg-border-custom h-[var(--stroke-hatch)] w-full" aria-hidden="true"></div>
     </header>
 
-    <!-- Warning / Disclaimer block if present -->
+    <!-- Caution slip -->
     {
       exp.data.warning && (
-        <div class="flex gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-amber-800 dark:text-amber-300">
-          <TriangleAlert class="mt-0.5 size-5 shrink-0" />
+        <aside
+          aria-label="Caveats and disclaimer"
+          class="border-structural border-border-custom bg-surface flex gap-3 rounded-sm p-4 sm:p-5"
+        >
+          <DoodleIcon name="interface/caution" class="text-primary mt-0.5 size-5 shrink-0" />
           <div>
-            <h4 class="text-small mb-1 font-mono font-bold tracking-wider uppercase">
-              Caveats & Disclaimer
-            </h4>
-            <p class="text-small leading-relaxed italic">{exp.data.warning}</p>
+            <h2 class="text-small text-text mb-1 font-mono font-bold tracking-[0.16em] uppercase">
+              Caution slip
+            </h2>
+            <p class="text-small text-text-muted leading-relaxed italic">{exp.data.warning}</p>
           </div>
-        </div>
+        </aside>
       )
     }
 
-    <!-- Content Columns -->
-    <div class="grid grid-cols-1 gap-12 lg:grid-cols-4">
-      <!-- Main Content -->
-      <div class="lg:col-span-3">
-        <article
-          class="prose-custom text-body text-text-muted max-w-none space-y-6 leading-relaxed"
-        >
-          <Content />
-        </article>
-      </div>
-
-      <!-- Sidebar -->
-      <div class="space-y-8 lg:col-span-1">
-        <!-- Demo / Link cards -->
-        {
-          exp.data.demoLinks && exp.data.demoLinks.length > 0 && (
-            <div class="border-border-custom bg-surface space-y-4 rounded-lg border p-5">
-              <h4 class="text-caption text-text font-mono font-bold tracking-wider uppercase">
-                Demo / Links
-              </h4>
-              <nav class="flex flex-col gap-2.5">
-                {exp.data.demoLinks.map((link) => (
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-small text-primary hover:text-primary-hover flex items-center gap-1.5 font-semibold transition-colors focus-visible:underline"
-                  >
-                    {link.label}
-                    <ExternalLink class="size-3.5" />
-                  </a>
-                ))}
-              </nav>
-            </div>
-          )
-        }
-
-        <!-- Sticky Table of Contents -->
+    <!-- Record -->
+    <div class="grid grid-cols-1 gap-10 lg:grid-cols-4 lg:gap-12">
+      <div class="flex min-w-0 flex-col gap-8 lg:col-span-3">
         {
           headings.length > 0 && (
-            <aside class="border-border-custom sticky top-8 hidden space-y-4 border-l pl-4 lg:block">
-              <h4 class="text-caption text-text font-mono font-bold tracking-wider uppercase">
-                On this page
-              </h4>
-              <nav class="space-y-2" id="toc-nav">
+            <details class="border-structural border-border-custom bg-surface order-1 rounded-sm lg:hidden">
+              <summary class="text-caption text-text hover:text-primary cursor-pointer list-none px-4 py-3 font-mono font-bold tracking-[0.18em] uppercase transition-colors duration-200 [&::-webkit-details-marker]:hidden">
+                <span class="inline-flex items-center gap-2">
+                  <DoodleIcon name="interface/list" class="size-4" />
+                  On this page
+                </span>
+              </summary>
+              <nav class="space-y-2 px-4 pb-4" aria-label="Entry contents">
                 {headings
                   .filter((h) => h.depth >= 2 && h.depth <= 4)
                   .map((h) => (
@@ -145,12 +143,193 @@ const statusDotStyles = {
                       {h.text}
                     </a>
                   ))}
+                {exp.data.keyTakeaway && (
+                  <a href="#lab-takeaway" class="toc-link transition-all">
+                    Bottom line
+                  </a>
+                )}
               </nav>
+            </details>
+          )
+        }
+
+        {
+          exp.data.objectives && exp.data.objectives.length > 0 && (
+            <section
+              aria-labelledby="lab-objectives-heading"
+              class="border-structural border-border-custom order-3 rounded-sm p-5 sm:p-6 lg:order-2"
+            >
+              <h2
+                id="lab-objectives-heading"
+                class="text-caption text-text mb-4 font-mono font-bold tracking-[0.18em] uppercase"
+              >
+                What this entry set out to test
+              </h2>
+              <ol class="space-y-2.5">
+                {exp.data.objectives.map((objective, index) => (
+                  <li class="text-body text-text-muted flex items-start gap-3 leading-relaxed">
+                    <span class="text-micro text-primary mt-1.5 shrink-0 font-mono font-bold">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span>{objective}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )
+        }
+
+        <article
+          class="prose-custom text-body text-text-muted order-2 max-w-none space-y-6 leading-relaxed lg:order-3"
+        >
+          <Content />
+        </article>
+
+        {
+          exp.data.keyTakeaway && (
+            <aside
+              id="lab-takeaway"
+              aria-label="Key takeaway"
+              class="border-structural border-border-custom bg-surface relative order-4 rounded-sm p-6 sm:p-7"
+            >
+              <span
+                class="border-border-custom bg-surface-subtle absolute -top-1.5 -left-1.5 size-3 rounded-[1px] border"
+                aria-hidden="true"
+              />
+              <span
+                class="border-border-custom bg-surface-subtle absolute -right-1.5 -bottom-1.5 size-3 rounded-[1px] border"
+                aria-hidden="true"
+              />
+              <p class="text-caption text-primary mb-3 font-mono font-bold tracking-[0.18em] uppercase">
+                Bottom line · key takeaway
+              </p>
+              <p class="text-body-large font-display text-text leading-snug italic">
+                {exp.data.keyTakeaway}
+              </p>
             </aside>
           )
         }
+
+        {
+          exp.data.demoLinks && exp.data.demoLinks.length > 0 && (
+            <section
+              aria-labelledby="lab-links-heading"
+              class="border-structural border-border-custom order-5 rounded-sm"
+            >
+              <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div class="space-y-1">
+                  <h2
+                    id="lab-links-heading"
+                    class="text-caption text-text font-mono font-bold tracking-[0.18em] uppercase"
+                  >
+                    Filed links
+                  </h2>
+                  <p class="text-small text-text-muted">
+                    The live tool or source backing this entry.
+                  </p>
+                </div>
+                <nav class="flex flex-wrap items-center gap-2" aria-label="Experiment links">
+                  {exp.data.demoLinks.map((link) => (
+                    <LinkButton
+                      href={link.url}
+                      variant="secondary"
+                      size="md"
+                      {...externalLinkAttrs(link.url)}
+                    >
+                      {link.label}
+                      <DoodleIcon name="interface/link" class="size-3.5" />
+                    </LinkButton>
+                  ))}
+                </nav>
+              </div>
+            </section>
+          )
+        }
       </div>
+
+      <aside class="space-y-6 lg:col-span-1">
+        {
+          headings.length > 0 && (
+            <div class="border-border-custom sticky top-8 hidden space-y-4 border-l pl-4 lg:block">
+              <h2 class="text-caption text-text font-mono font-bold tracking-[0.18em] uppercase">
+                On this page
+              </h2>
+              <nav class="space-y-2" id="toc-nav" aria-label="Table of contents">
+                {headings
+                  .filter((h) => h.depth >= 2 && h.depth <= 4)
+                  .map((h) => (
+                    <a
+                      href={`#${h.slug}`}
+                      class="toc-link transition-all"
+                      style={`padding-left: ${(h.depth - 2) * 8}px;`}
+                    >
+                      {h.text}
+                    </a>
+                  ))}
+                {exp.data.keyTakeaway && (
+                  <a href="#lab-takeaway" class="toc-link transition-all">
+                    Bottom line
+                  </a>
+                )}
+              </nav>
+            </div>
+          )
+        }
+      </aside>
     </div>
+
+    {
+      (prev || next) && (
+        <nav
+          aria-label="More ledger entries"
+          class="border-border-custom bg-border-custom grid grid-cols-1 gap-px overflow-hidden rounded-sm border sm:grid-cols-2"
+        >
+          {prev ? (
+            <a
+              href={`/experiments/${prev.id}`}
+              class="bg-surface group focus-visible:ring-focus focus-visible:ring-offset-bg hover:bg-surface-subtle flex flex-col gap-1.5 p-5 transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+            >
+              <span class="text-micro text-text-muted inline-flex items-center gap-1.5 font-mono font-bold tracking-[0.18em] uppercase">
+                <DoodleIcon name="arrows/arrow-left" class="size-3.5" />
+                Previous entry
+              </span>
+              <span class="text-body font-display text-text group-hover:text-primary font-semibold transition-colors duration-200">
+                {prev.data.title}
+              </span>
+            </a>
+          ) : (
+            <span class="bg-surface hidden sm:block" aria-hidden="true" />
+          )}
+          {next ? (
+            <a
+              href={`/experiments/${next.id}`}
+              class="bg-surface group focus-visible:ring-focus focus-visible:ring-offset-bg hover:bg-surface-subtle flex flex-col items-start gap-1.5 p-5 transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 sm:items-end"
+            >
+              <span class="text-micro text-text-muted inline-flex items-center gap-1.5 font-mono font-bold tracking-[0.18em] uppercase">
+                Next entry
+                <DoodleIcon name="arrows/arrow-right" class="size-3.5" />
+              </span>
+              <span class="text-body font-display text-text group-hover:text-primary font-semibold transition-colors duration-200">
+                {next.data.title}
+              </span>
+            </a>
+          ) : (
+            <span class="bg-surface hidden sm:block" aria-hidden="true" />
+          )}
+        </nav>
+      )
+    }
+
+    <DividerChessboard />
+    <p class="text-micro text-text-muted text-center font-mono tracking-[0.22em] uppercase">
+      End of entry ·{" "}
+      <a
+        href="/experiments"
+        class="text-primary hover:text-primary-hover underline decoration-dotted underline-offset-2"
+      >
+        return to the ledger
+      </a>
+    </p>
   </Container>
 
   <!-- Table of Contents Active Link Highlighter -->
@@ -163,7 +342,9 @@ const statusDotStyles = {
       };
 
       const links = document.querySelectorAll("#toc-nav a");
-      const headers = document.querySelectorAll(".prose-custom h2, .prose-custom h3");
+      const headers = document.querySelectorAll(
+        ".prose-custom h2, .prose-custom h3, #lab-takeaway"
+      );
 
       const observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {

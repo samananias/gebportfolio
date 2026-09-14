@@ -1,5 +1,11 @@
 ---
 title: "ID Photo Studio"
+summary: "Can a print-ready ID photo be produced entirely in the browser — with the portrait never uploaded anywhere?"
+objectives:
+  - "Keep the full pipeline client-side so no image bytes ever leave the browser."
+  - "Serve canonical export presets and metadata-only telemetry from a thin Worker."
+  - "Reserve a paid-fallback seam without shipping image upload."
+keyTakeaway: "Heavy machine learning stays on-device and the backend never receives image bytes — the privacy model is the architecture."
 status: "active"
 warning: "In-browser AI background removal downloads a one-time model (~40MB, browser-cached). Photos are processed on-device and never uploaded in v1."
 technologies:
@@ -9,9 +15,9 @@ technologies:
   - "Cloudflare Workers"
 demoLinks:
   - label: "Open ID Photo Tool"
-    url: "https://samananias.is-a.dev/crop"
+    url: "/crop"
   - label: "Remove Only Page"
-    url: "https://samananias.is-a.dev/remove-background"
+    url: "/remove-background"
 ---
 
 ## Overview
