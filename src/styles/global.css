@@ -276,6 +276,37 @@ html.theme-transition .theme-toggle .theme-icon {
   }
 }
 
+/* Syntax highlighting — Shiki bound to the design tokens (no baked palettes).
+   `theme: "css-variables"` in astro.config.ts makes Shiki emit var(--astro-code-*)
+   references, so code blocks stay ink-on-paper and WCAG AA in both themes. */
+:root {
+  --astro-code-color-text: var(--color-text-raw);
+  --astro-code-color-background: var(--color-surface-subtle-raw);
+  --astro-code-token-constant: var(--color-primary-raw);
+  --astro-code-token-string: var(--color-primary-raw);
+  --astro-code-token-comment: var(--color-text-muted-raw);
+  --astro-code-token-keyword: var(--color-primary-raw);
+  --astro-code-token-parameter: var(--color-text-raw);
+  --astro-code-token-function: var(--color-primary-raw);
+  --astro-code-token-string-expression: var(--color-primary-raw);
+  --astro-code-token-punctuation: var(--color-text-muted-raw);
+  --astro-code-token-link: var(--color-primary-raw);
+}
+
+.dark {
+  --astro-code-color-text: var(--color-text-raw);
+  --astro-code-color-background: var(--color-surface-subtle-raw);
+  --astro-code-token-constant: var(--color-primary-raw);
+  --astro-code-token-string: var(--color-primary-raw);
+  --astro-code-token-comment: var(--color-text-muted-raw);
+  --astro-code-token-keyword: var(--color-primary-raw);
+  --astro-code-token-parameter: var(--color-text-raw);
+  --astro-code-token-function: var(--color-primary-raw);
+  --astro-code-token-string-expression: var(--color-primary-raw);
+  --astro-code-token-punctuation: var(--color-text-muted-raw);
+  --astro-code-token-link: var(--color-primary-raw);
+}
+
 /* Table of Contents Highlight and Transition Utilities */
 .toc-link {
   @apply text-caption text-text-muted hover:text-primary block py-1 font-medium transition-colors duration-150;

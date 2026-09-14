@@ -116,6 +116,14 @@ export default defineConfig({
   adapter: cloudflare({
     imageService: "passthrough",
   }),
+  markdown: {
+    // Bind Shiki's syntax colors to the design tokens instead of a baked
+    // palette (github-dark's comment tokens fail WCAG AA). Token values live
+    // in src/styles/global.css under the `--astro-code-*` variables.
+    shikiConfig: {
+      theme: "css-variables",
+    },
+  },
   integrations: [
     react(),
     // Only include Keystatic integration in development/preview builds
