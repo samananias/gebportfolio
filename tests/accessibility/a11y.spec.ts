@@ -12,6 +12,8 @@ test.describe("Accessibility Audits (WCAG 2.2 AA Compliance)", () => {
     "/contact",
     "/search",
     "/remove-background",
+    "/crop",
+    "/crop?mode=record",
   ];
 
   for (const route of routes) {

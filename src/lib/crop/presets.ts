@@ -49,6 +49,18 @@ export const BG_OPTIONS = ["white", "light-blue", "transparent"] as const;
 
 export type BgOption = (typeof BG_OPTIONS)[number];
 
+/**
+ * Print colors behind each background choice. These are product values
+ * (the actual ink a print shop lays down), not theme tokens: the canvas
+ * preview and the export encoder must agree on them byte-for-byte, so
+ * they live beside the presets instead of in any component.
+ */
+export const BG_SWATCH: Record<BgOption, string> = {
+  white: "#ffffff",
+  "light-blue": "#d0e6ff",
+  transparent: "transparent",
+};
+
 /** Upload and export guardrails enforced by validators and the API stub. */
 export const EXPORT = {
   formats: ["image/jpeg", "image/png"],

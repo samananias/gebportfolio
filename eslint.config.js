@@ -22,6 +22,10 @@ export default tseslint.config(
   {
     rules: {
       // Custom rules and overrides
+      // The ARIA tabs pattern requires tabindex="0" on every tabpanel so
+      // keyboard users can reach the panel content; the strict preset does
+      // not exempt that role, so it is allowed explicitly (spec 0009 §1).
+      "astro/jsx-a11y/no-noninteractive-tabindex": ["error", { roles: ["tabpanel"] }],
     },
   }
 );

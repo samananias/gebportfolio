@@ -307,6 +307,34 @@ html.theme-transition .theme-toggle .theme-icon {
   --astro-code-token-link: var(--color-primary-raw);
 }
 
+/* Transparency checkerboard for on-canvas cutout previews (spec 0009 §6).
+   One token-bound utility shared by the /crop framing canvas and the
+   /remove-background result preview, so both surfaces agree on how
+   transparency reads in either theme — plain CSS class, like the other
+   custom classes in this file, not a Tailwind @utility. */
+.transparency-checkerboard {
+  background-color: var(--color-surface);
+  background-image:
+    linear-gradient(
+      45deg,
+      var(--color-surface-subtle) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-surface-subtle) 75%
+    ),
+    linear-gradient(
+      45deg,
+      var(--color-surface-subtle) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-surface-subtle) 75%
+    );
+  background-position:
+    0 0,
+    10px 10px;
+  background-size: 20px 20px;
+}
+
 /* Table of Contents Highlight and Transition Utilities */
 .toc-link {
   @apply text-caption text-text-muted hover:text-primary block py-1 font-medium transition-colors duration-150;

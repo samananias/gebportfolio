@@ -217,13 +217,7 @@ export default function RemoveStudio() {
                 Result
               </span>
               {cutoutRef.current ? (
-                <div
-                  className="border-border-custom mt-2 rounded-md border"
-                  style={{
-                    backgroundImage:
-                      "repeating-linear-gradient(45deg, #e3e6ec 0 12px, #f4f6fa 12px 24px)",
-                  }}
-                >
+                <div className="transparency-checkerboard border-border-custom mt-2 rounded-md border">
                   <img
                     src={cutoutRef.current.src}
                     alt="The photo with its background removed, shown over a checkerboard so transparency is visible"
@@ -258,7 +252,7 @@ export default function RemoveStudio() {
         {error && (
           <p
             role="alert"
-            className="text-small mt-3 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-rose-700 dark:text-rose-300"
+            className="text-small border-structural border-text bg-surface-subtle text-text mt-3 flex items-center gap-2 rounded-md px-3 py-2"
           >
             <DoodleIcon name="interface/caution" className="size-3.5 shrink-0" />
             {error}

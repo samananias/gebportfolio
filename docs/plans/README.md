@@ -56,3 +56,5 @@ For quick iteration, copy the standard template from [0000-template.md](0000-tem
 | `0007`   | [Image Editing Improvements](0007-image-editing-improvements.md)                                                                 | `Draft`       | 2026-09-11 |
 | `0007.1` | [Image Editing Improvements Roadmap & Checkpoints](0007.1-image-editing-roadmap.md)                                              | `Draft`       | 2026-09-11 |
 | `0008`   | [Lab Ledger & Entry Records Specification](0008-lab-ledger-specification.md)                                                     | `In Progress` | 2026-09-15 |
+| `0009`   | [Crop Page Redesign — Two-Mode ID Photo Studio](0009-crop-page-redesign-specification.md)                                        | `In Progress` | 2026-09-15 |
+| `0009.1` | [Crop Page Redesign Roadmap & Checkpoints](0009.1-crop-page-redesign-roadmap.md)                                                 | `In Progress` | 2026-09-15 |
