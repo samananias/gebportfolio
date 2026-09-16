@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Updated terminal and command execution rules across `.agents/AGENTS.md`, `AGENTS.md`, `CLAUDE.md`, `docs/engineering/AI-Guidelines.md`, and `docs/engineering/AI-Project-Context.md`:
+  - Prioritized Git Bash as the primary Windows terminal with direct CLI command execution (e.g. `npx pnpm run format`).
+  - Specified `cmd /c` (e.g. `cmd /c "npx pnpm run format"`) as the fallback when Git Bash cannot be used (e.g. within PowerShell).
+
 - Shipped **Crop Page Redesign Phases 2–8** (roadmap [0009.1](plans/0009.1-crop-page-redesign-roadmap.md) — the two-mode Studio surface):
   - **Bench spine** (`src/lib/crop/stamps.ts`, `src/components/islands/CropStudio.tsx`): exactly one stage expanded at a time with `waiting`/`current`/`done`/`locked` stamps shared with the Lab ledger language; step titles move to Manrope with mono ordinal eyebrows; the spine advances on load, removal, and export.
   - **Intake**: drop zone on the source plate, clipboard paste while the source stage is open, a secondary `Camera` input (`capture="user"`), one `handleFile` funnel with a busy guard, and alerts scoped to the stage that produced them.

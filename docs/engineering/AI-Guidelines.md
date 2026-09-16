@@ -15,7 +15,7 @@ Directives for AI agents collaborating on this codebase.
 - Do not restructure the project directory.
 - Do not introduce redundant dependencies.
 - Preserve existing code formatting and types.
-- Always execute terminal commands via `cmd /c` on Windows (e.g. `cmd /c "npx pnpm run format"`) to prevent PowerShell `.ps1` execution errors.
-- **Git Bash exception:** when the active terminal is Git Bash, run commands directly (`npx pnpm run format`) — never use `cmd /c` or `cmd //c` there.
+- Always use Git Bash on Windows to run CLI commands directly (`npx pnpm run format`). Never use `cmd /c` or `cmd //c` inside Git Bash.
+- If Git Bash cannot be used (e.g. executing in PowerShell), fall back to `cmd /c` (e.g. `cmd /c "npx pnpm run format"`) to prevent PowerShell `.ps1` execution errors.
 - Do not use system text emojis in UI components or code; use theme-aware `<DoodleIcon>` vector SVGs (`DoodleIcon.astro` / `DoodleIcon.tsx`) instead (see [DoodleIconSystem.md](../design/DoodleIconSystem.md)).
 - Never leak secrets or personal identifying info in logs, prompts, or commits.
