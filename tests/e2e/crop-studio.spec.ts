@@ -103,8 +103,14 @@ test.describe("ID Photo Studio frontend", () => {
     await expect(page.getByText("Portrait loaded.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Export 2x2 photo" })).toBeEnabled();
 
-    // Switch preset and pick transparent background.
-    await page.getByRole("radio", { name: /1x1/ }).click();
+    // Switch preset and pick transparent background. The preset radio is
+    // sr-only inside its card label, so its clipped hit target can never pass
+    // actionability checks (label content "intercepts pointer events"); click
+    // the visible card like a real user, which toggles the radio the same way.
+    const presetCard = page
+      .locator("label")
+      .filter({ has: page.getByRole("radio", { name: /1x1/ }) });
+    await presetCard.click();
     await page.getByRole("button", { name: "Export 1x1 photo" }).click();
 
     const download = page.locator('a[download="id-photo-1x1.png"]');

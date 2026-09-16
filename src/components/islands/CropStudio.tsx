@@ -745,7 +745,7 @@ export default function CropStudio() {
       </p>
       <section
         aria-labelledby="crop-step-source"
-        className={`border-structural border-border-custom bg-surface relative rounded-sm p-6 ${
+        className={`border-structural border-border-custom bg-surface relative scroll-mt-16 rounded-sm p-6 ${
           dragging ? "border-text" : ""
         }`}
         onDragEnter={(event) => {
@@ -865,7 +865,7 @@ export default function CropStudio() {
 
       <section
         aria-labelledby="crop-step-frame"
-        className="border-structural border-border-custom bg-surface relative rounded-sm p-6"
+        className="border-structural border-border-custom bg-surface relative scroll-mt-16 rounded-sm p-6"
       >
         <span
           aria-hidden="true"
@@ -1157,7 +1157,7 @@ export default function CropStudio() {
 
       <section
         aria-labelledby="crop-step-export"
-        className="border-structural border-border-custom bg-surface relative rounded-sm p-6"
+        className="border-structural border-border-custom bg-surface relative scroll-mt-16 rounded-sm p-6"
       >
         <span
           aria-hidden="true"
