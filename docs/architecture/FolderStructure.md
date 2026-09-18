@@ -8,7 +8,7 @@ The workspace layout and module boundary constraints.
 
 - [src/pages/](../../src/pages) — Entry points for routes. No complex UI logic.
 - [src/layouts/](../../src/layouts) — Page shells and document envelopes.
-- [src/components/](../../src/components) — Pure UI components separated into `primitives`, `sections`, `content`, `navigation`, `feedback`, and `forms`.
+- [src/components/](../../src/components) — Pure UI components separated into `primitives`, `sections`, `content`, `navigation`, `feedback`, `forms`, feature modules (`chat/`, `chess/`, `crop/`), and client islands (`islands/`).
 - [src/features/](../../src/features) — Self-contained domain modules containing private components and types.
 - [src/assets/](../../src/assets) — Vector and image assets (`chess/`, `chess-nav/`, `chess-icons/`, `brand/`, `theme-icons/`).
 - [src/content/](../../src/content) — Markdown and data assets. No UI code.

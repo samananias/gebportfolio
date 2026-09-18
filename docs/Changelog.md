@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Refactored `src/components/islands/CropStudio.tsx` file structure for maintainability:
+  - Reduced the main orchestrator file from 1,297 lines to 411 lines (~68% reduction) while preserving 100% of existing behavior, state transitions, DOM IDs, ARIA semantics, and test contracts.
+  - Created `src/components/crop/` to house dedicated, single-responsibility submodules:
+    - `types.ts`: studio state, bench stage IDs, crop box, and error types.
+    - `constants.ts`: export format disclosures, nudge constants, step metadata, and `localStorage` consent persistence helpers.
+    - `StageHeader.tsx`: reusable bench accordion row header (ordinal eyebrow, status stamp badge, accessible accordion button).
+    - `useCropCanvas.ts`: custom hook encapsulating canvas rendering, DPR scaling, two-tone stroke framing, pointer dragging with inverted scale, keyboard and nudge panning, zoom repan, and theme mutation observing.
+    - `SourceStage.tsx`: Stage 01 Source section with localized drag-and-drop state, drop zone, file/camera intake, and start-over actions.
+    - `FrameStage.tsx`: Stage 02 Framing workbench view with canvas, readout, nudge buttons, zoom slider, preset/background selectors, and background removal flow.
+    - `ExportStage.tsx`: Stage 03 Export view with collapsed summary, format radio picker, print notes, export trigger, and download affordance.
+  - Validated via formatting (`prettier`), linting (`eslint`), Astro compiler typecheck and link validation (`check`), and production build compilation (`build`).
+
 - Updated terminal and command execution rules across `.agents/AGENTS.md`, `AGENTS.md`, `CLAUDE.md`, `docs/engineering/AI-Guidelines.md`, and `docs/engineering/AI-Project-Context.md`:
   - Prioritized Git Bash as the primary Windows terminal with direct CLI command execution (e.g. `npx pnpm run format`).
   - Specified `cmd /c` (e.g. `cmd /c "npx pnpm run format"`) as the fallback when Git Bash cannot be used (e.g. within PowerShell).

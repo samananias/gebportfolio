@@ -80,7 +80,7 @@ export targets, and the woodcut identity.
 
 Implementation: `src/pages/crop.astro` (route shell) plus the `CropStudio`
 React island (`client:visible`) in
-`src/components/islands/CropStudio.tsx`; geometry, presets, guards, and the
+`src/components/islands/CropStudio.tsx` (supported by modular subcomponents in `src/components/crop/`); geometry, presets, guards, and the
 removal pipeline come from `src/lib/crop/{geometry,presets,validation,removal}.ts`.
 
 - The route renders an eyebrow pill (`Lab · ID Photo Studio`), an `h1`, a
@@ -515,7 +515,8 @@ preset, ms }`); `POST /api/crop/remove` is a reserved `501` stub
 - **Component boundaries.** `src/pages/crop.astro` owns the header, the mode
   switch, the record lane, and the cross-links (all static). The
   `CropStudio` island keeps owning the bench only, still mounted
-  `client:visible`. New: `src/lib/crop/stamps.ts` for the stage vocabulary.
+  `client:visible`, coordinating modular subcomponents in `src/components/crop/`
+  (`SourceStage`, `FrameStage`, `ExportStage`, `StageHeader`, `useCropCanvas`). New: `src/lib/crop/stamps.ts` for the stage vocabulary.
 - **State machine.** Extend the island's `Stage` union to
   `idle → ready → consent → removing → removed`, with abort returning to
   `ready`; add a separate `isReading` flag for file probe/downscale so a
