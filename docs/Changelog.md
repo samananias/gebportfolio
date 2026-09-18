@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Added `/crop` Studio navigation, reset, and removal feedback (spec 0009
+  Feature 9):
+  - Page-level **Back to Lab** link above the masthead, reusing the Lab
+    entry-page back-link pattern (arrow-left doodle icon, semantic tokens).
+  - **Start over** now reachable from the frame stage (where the bench rests
+    after a load), wired to the existing `resetAll` path — photo-dependent
+    state clears, preset/background/format/model-consent preferences persist.
+  - Honest background-removal loading feedback: `removal.ts` now tags progress
+    events with `phase: "fetch" | "compute"`, and a token-bound inline panel
+    (`RemovalProgressPanel.tsx`) shows a theme-aware indeterminate spinner
+    with the real per-file download percent, then an explicit
+    no-progress-count state during on-device inference. No fake percentages;
+    phase transitions are announced via the existing status line; abort
+    behavior is unchanged.
+  - Composition: the page container moves to the `wide` step and the frame
+    stage caps its canvas column at 640 px so 1920×1080 stays composed; the
+    removal action, consent, progress, and cancel group into one labelled
+    **Background removal** sub-panel.
+  - `/remove-background` behavior is unchanged (its percent stays
+    download-only via the phase guard).
+  - New E2E coverage for the Back to Lab link and the frame-stage reset.
+
+- Refactored `src/components/islands/CropStudio.tsx` file structure for maintainability:
+  - Reduced the main orchestrator file from 1,297 lines to 411 lines (~68% reduction) while preserving 100% of existing behavior, state transitions, DOM IDs, ARIA semantics, and test contracts.
+  - Created `src/components/crop/` to house dedicated, single-responsibility submodules:
+    - `types.ts`: studio state, bench stage IDs, crop box, and error types.
+    - `constants.ts`: export format disclosures, nudge constants, step metadata, and `localStorage` consent persistence helpers.
+    - `StageHeader.tsx`: reusable bench accordion row header (ordinal eyebrow, status stamp badge, accessible accordion button).
+    - `useCropCanvas.ts`: custom hook encapsulating canvas rendering, DPR scaling, two-tone stroke framing, pointer dragging with inverted scale, keyboard and nudge panning, zoom repan, and theme mutation observing.
+    - `SourceStage.tsx`: Stage 01 Source section with localized drag-and-drop state, drop zone, file/camera intake, and start-over actions.
+    - `FrameStage.tsx`: Stage 02 Framing workbench view with canvas, readout, nudge buttons, zoom slider, preset/background selectors, and background removal flow.
+    - `ExportStage.tsx`: Stage 03 Export view with collapsed summary, format radio picker, print notes, export trigger, and download affordance.
+  - Validated via formatting (`prettier`), linting (`eslint`), Astro compiler typecheck and link validation (`check`), and production build compilation (`build`).
+
+- Updated terminal and command execution rules across `.agents/AGENTS.md`, `AGENTS.md`, `CLAUDE.md`, `docs/engineering/AI-Guidelines.md`, and `docs/engineering/AI-Project-Context.md`:
+  - Prioritized Git Bash as the primary Windows terminal with direct CLI command execution (e.g. `npx pnpm run format`).
+  - Specified `cmd /c` (e.g. `cmd /c "npx pnpm run format"`) as the fallback when Git Bash cannot be used (e.g. within PowerShell).
+
+- Shipped **Crop Page Redesign Phases 2–8** (roadmap [0009.1](plans/0009.1-crop-page-redesign-roadmap.md) — the two-mode Studio surface):
+  - **Bench spine** (`src/lib/crop/stamps.ts`, `src/components/islands/CropStudio.tsx`): exactly one stage expanded at a time with `waiting`/`current`/`done`/`locked` stamps shared with the Lab ledger language; step titles move to Manrope with mono ordinal eyebrows; the spine advances on load, removal, and export.
+  - **Intake**: drop zone on the source plate, clipboard paste while the source stage is open, a secondary `Camera` input (`capture="user"`), one `handleFile` funnel with a busy guard, and alerts scoped to the stage that produced them.
+  - **Consent-first removal**: the ~40 MB first-run model download is disclosed from `REMOVAL_MODEL` and confirmed before it starts, cancellable mid-run via a monotonic run token (stale resolutions are discarded), and `localStorage["crop-model-consent"]` is written only after a successful first load.
+  - **One-action export**: the export click itself triggers the download (the visible affordance stays for re-download); the dead format state becomes a real PNG/JPEG radio group with the transparency-flattening disclosure; any framing or setting change except the face-guide toggle invalidates a prepared file; a factual print note derives from `ID_PRESETS`/`EXPORT`.
+  - **Canvas**: two-tone frame and guide (ink halo under a paper stroke) with colors resolved from tokens at draw time, redraw on theme change via `MutationObserver`, and one token-bound `.transparency-checkerboard` class in `src/styles/global.css` shared by the canvas and the `/remove-background` preview (replacing the hardcoded `repeating-linear-gradient`); `BG_SWATCH` moved to `src/lib/crop/presets.ts` as product data.
+  - **Two modes** (`src/pages/crop.astro`): a conforming tablist (`Studio` default, `How it works` record lane) with roving tabindex, Arrow/Home/End selection, `history.replaceState` deep links, `localStorage` memory, a no-JS stacked fallback, and four record blocks sourced from `ID_PRESETS`/`EXPORT`/`REMOVAL_MODEL`; the island moved to `client:idle` so the bench still hydrates under a `?mode=record` deep link.
+  - **Accessibility parity**: the canvas is a labelled `role="group"` with `aria-describedby`, a mono framing readout, four nudge buttons sharing the arrow-key pan path, a separate debounced live region for pan/zoom announcements, native radios inside `fieldset`/`legend` for every option group, and a tabpanel `tabindex` allowance documented in `eslint.config.js`.
+  - **Tests**: new `tests/e2e/crop-modes.spec.ts` (mode switching without navigation, deep link, hydration on the deep link, invalid-mode fallback, keyboard switching, record-lane facts, no-JS stacking); `/crop?mode=record` joins the axe route list.
+  - Verified: `format`, `lint`, `check` (0 errors, `check-links` SUCCESS), `build`, `test:e2e` (177 passed, 0 failed), `test:a11y` (55 passed, zero violations), and the Impeccable detector (no findings in changed code). Outstanding for `Implemented`: the owner screenshot round, the desktop screen-reader spot-check, and the CI Lighthouse budget confirmation.
+
+- Shipped **Crop Page Redesign** Phase 1 (roadmap [0009.1](plans/0009.1-crop-page-redesign-roadmap.md) — shippable safe wins, no structure moves):
+  - Added `/crop` to the axe route list (`tests/accessibility/a11y.spec.ts`); the full suite passes 50/50 (10 routes × 5 browsers) with zero violations.
+  - Gave the framing canvas the standard `focus-visible:ring-2` focus indicator and restyled the error rows onto existing tokens, deleting the raw `rose-*` palette values and the semi-transparent wash (`src/components/islands/CropStudio.tsx`, `src/components/islands/RemoveStudio.tsx`).
+  - Verified: `format`, `lint`, `check` (0 errors, `check-links` SUCCESS), `build`, crop E2E (crop-studio + crop-api specs, 50/50), and `test:a11y` (50/50).
+
+- Documented the **Crop Page Redesign** (docs-only, no code): added spec [0009](plans/0009-crop-page-redesign-specification.md) (`Draft`) and roadmap [0009.1](plans/0009.1-crop-page-redesign-roadmap.md) (`Draft`) for `/crop`, and captured the route's surface brief at `.impeccable/surfaces/src-pages-crop-astro.md` (a local, gitignored design artefact):
+  - **Audit first**: the spec records 13 grounded defects with file evidence — Fraunces rendered below H2 on all three step headings, a hardcoded `repeating-linear-gradient` on the sibling removal preview, raw `rose-*` palette plus a semi-transparent wash in the error rows, a canvas whose checkerboard/frame/guide never respond to the theme, unused ordinal eyebrows, **`/crop` missing from the axe route list**, radiogroups without the radio keyboard pattern, a framing surface a screen-reader user cannot operate, a ~40 MB model download with no consent or abort, a two-click export, file-input-only intake, first-run density, and a dead export-format state.
+  - **Two-lane surface**: `Studio` (default, fast utility path) and `How it works` (opt-in evidence lane) behind one conforming tablist — roving tabindex, Arrow/Home/End, `aria-controls` → `role="tabpanel"`, deep-linkable via `?mode=record`, with a no-script stacked fallback. This is the codebase's first conforming tabs pattern; the two existing mislabelled tablists are parked, not silently changed.
+  - **Bench spine**: one stage expanded at a time with a shared `waiting`/`current`/`done`/`locked` stamp vocabulary in a new `src/lib/crop/stamps.ts`, extending the ruled-ledger language from [0008](plans/0008-lab-ledger-specification.md); step titles move to Manrope with mono ordinal eyebrows.
+  - **Consent-first removal**: the ~40 MB one-time model download is confirmed, disclosed (size, caching, on-device processing), abortable, and race-safe via a run token; the consent flag is written only after a successful first load.
+  - **One-action export** with a real PNG/JPEG format choice (including the transparency-flattening disclosure [0007](plans/0007-image-editing-improvements.md) requires), a stale-export guard that exempts the guide toggle so byte-identical exports stay byte-identical, and a factual print helper.
+  - **Canvas legibility**: two-tone frame and guide drawn so neither vanishes over a white or black photo, colours resolved from tokens at draw time, and one shared token-bound checkerboard replacing the hardcoded gradients.
+  - **Accessibility parity**: `/crop` and `/crop?mode=record` join the axe suite; native radios replace the ARIA radio buttons; a framing readout plus nudge controls make the actual job completable without sight of the canvas; `role="application"` is dropped for a labelled group.
+  - No code, schema, API, or dependency changes: export targets (600/300 px at 300 DPI), telemetry, and the thin-backend contract are preserved and asserted in the acceptance criteria.
+
+- Redesigned the **Lab ledger and entry records** (`src/pages/experiments/index.astro`, `src/pages/experiments/[slug].astro`, `src/lib/lab/{accession,order,stamps,links}.ts`, `src/content.config.ts`, `src/content/experiments/*.md`) — commit `0fb68c9`:
+  - **Field ledger index**: replaced the card grid with ruled ledger rows (`<ol>`), stable `EXP.xx` accession numbers derived from the content slug so adding an entry never renumbers existing rows, shared state stamps, State and Apparatus filters carrying `aria-pressed`, a live `role="status"` result count, and a reset-able hand-written empty state.
+  - **Entry record blueprint**: one shared layout for every entry — summary lede, objectives panel, key-takeaway seal (`#lab-takeaway`), filed links band, prev/next traversal in ledger order, and sticky desktop / disclosure mobile tables of contents whose scroll observer includes the takeaway anchor.
+  - **Shared helpers**: new `src/lib/lab/accession.ts`, `order.ts`, `stamps.ts`, and `links.ts` keep the accession number, ledger order (active → completed → shelved), stamp treatment, and external-link attributes identical between a ledger row and its record.
+  - **Content schema**: added optional `summary` and `keyTakeaway` plus a defaulted `objectives` array; `demoLinks[].url` now accepts root-relative paths (e.g. `/crop`) alongside absolute `http(s)` URLs so filed links resolve against whichever host serves the page.
+  - **Docs**: recorded the retrofit in [0008 Lab Ledger & Entry Records Specification](plans/0008-lab-ledger-specification.md) — accession model, accessibility contract, known limitations (accession stability is not uniqueness, and `keystatic.config.ts` lacks the new fields), and the verification still owed (no dedicated Lab e2e spec exists yet). Verified for this documentation-only follow-up: `format`, `lint`, `check` (0 errors, `check-links` SUCCESS), and `build`; the feature's own `test:e2e` / `test:a11y` gate remains outstanding.
+
+- Amended **ID Photo Studio zoom** (spec [0007](plans/0007-image-editing-improvements.md) Feature 1, roadmap [0007.1](plans/0007.1-image-editing-roadmap.md) Phase 5): the zoom slider now scales only the image underneath the fixed crop frame and face guide — previously it magnified the entire preview (frame and guide included) and never changed the exported composition. Zoom 1 is the cover fit; up to 4x shrinks the sampled region so the face can grow relative to the guide, with a visible note when zooming past the photo's resolution. Added high-quality smoothing to the preview, export, and oversize-upload downscale paths (blob URL instead of data URL). Verified: format, lint, `astro check` (0 errors), `check-links`, build, crop-studio e2e 6/6 (chromium). No new dependencies.
+
+- Implemented **Image Editing Improvements** (spec [0007](plans/0007-image-editing-improvements.md) Phases 1–3; `src/lib/crop/geometry.ts`, `src/lib/crop/removal.ts`, `src/components/islands/CropStudio.tsx`, `src/components/islands/RemoveStudio.tsx`, `src/pages/remove-background.astro`, `tests/e2e/crop-studio.spec.ts`, `tests/e2e/remove-background.spec.ts`, `tests/accessibility/a11y.spec.ts`):
+  - **Freely movable image**: the crop frame on `/crop` is now fixed and centered; pointer drag and arrow keys pan the photo underneath it, clamped by pure geometry helpers (`initialFrame`, `clampPanOffset`) so the frame can never expose empty area; export derives the sample box from the pan offset (targets unchanged: 2x2 600px, 1x1 300px).
+  - **Face placement guide**: preset-aware head oval + shoulder line drawn preview-only on the canvas, adapted to 2x2 versus 1x1, with a `role="switch"` toggle (default on); toggling it provably never changes export bytes (byte-identical `href` asserted in e2e).
+  - **Dedicated background remover**: new `/remove-background` page — upload, on-device removal, original-versus-result compare on a checkerboard, transparency-preserving PNG download, no crop controls — backed by the shared removal pipeline extracted to `src/lib/crop/removal.ts`; cross-linked from `/crop` and the Lab note; route added to the a11y suite.
+  - Verified: format, lint, `astro check` (0 errors), `check-links` (SUCCESS), build, crop-studio e2e 5/5 (chromium), remove-background e2e (model mocked; alpha-intact download, upload guards, graceful degradation, no crop selectors asserted), and `test:a11y` 8/8 (chromium). No new dependencies.
+
+- Documented **Image Editing Improvements plan** (docs-only, no code): added spec [0007](plans/0007-image-editing-improvements.md) (`Draft`) and roadmap [0007.1](plans/0007.1-image-editing-roadmap.md) (`Draft`) for the `/crop` editor (fixed-frame pan model, preset-aware face-placement guide, and a dedicated removal-only page reusing the on-device `@imgly` pipeline). No backend changes; no new dependencies.
+
+- Revived the **Lab index** (`src/pages/experiments/index.astro`): restored the archived listing from `src/content/_archive/experiments-index.astro` (status + technology filters, experiment cards with warning notes and demo links), replacing the "Under Construction" placeholder. ID Photo Studio, CSS Grid Chess, and Color Scheme Sandbox are now discoverable at `/experiments/`. Active filter pills use the `text-bg` token instead of hard-coded `text-white`. Verified: format, lint, `astro check` (0 errors), `check-links`, build, `test:a11y` 40/40 (including zero violations on `/experiments` across 5 browsers), and full `test:e2e` — the only failures were pre-existing flaky timing tests (chat modal, theme toggle, Mobile Safari carousel pawn), which pass in isolation.
+- Fixed the **ID Photo Studio preview distortion**: the crop canvas was styled as a square but its backing buffer used the source image's aspect ratio, so CSS stretched the preview (distorted face, rectangular-looking frame) while the export stayed correct — preview and download disagreed. The preview is now a true square stage that letterboxes the portrait, and the crop overlay, drag/keyboard mapping, and zoom all flow through one shared fit transform, so what you frame is exactly what exports. Added a `ResizeObserver` so the preview stays crisp on stage resize.
+- Documented **ID Photo Studio backend plan** (docs-only, no code): added [ADR 0008](decisions/0008-crop-thin-backend-client-removal.md) (`Proposed`), spec [0006](plans/0006-id-photo-studio-specification.md) (`Draft`), and backend roadmap [0006.1](plans/0006.1-id-photo-studio-backend-roadmap.md) (`Draft`) for the `samananias.is-a.dev/crop` tool (in-browser background removal plus 2x2/1x1 crop, thin Workers backend, no image persistence). Frontend implementation deferred.
+- Implemented **ID Photo Studio frontend** (`src/pages/crop.astro`, `src/components/islands/CropStudio.tsx`, `tests/e2e/crop-studio.spec.ts`, dependency `@imgly/background-removal`):
+  - `samananias.is-a.dev/crop` is now a working tool: upload a portrait, run in-browser AI background removal (WASM/ONNX model fetched to the browser and cached — photos never leave the device), pick a background (white / light-blue / transparent), crop to a 2x2 or 1x1 preset at 300DPI, and export a PNG download.
+  - React island (`client:visible`) fetches its presets from `GET /api/crop/config` instead of hardcoding sizes, so the frontend and backend share one source of truth; the 501 `/api/crop/remove` stub is wired as the automatic fallback seam.
+  - E2E covers the three-step workbench empty state, inline rejection of non-image uploads, and a full portrait-to-PNG-export flow with the model mocked (no 40MB download in CI).
+  - Full verification suite passed: format, lint, `astro check` (0 errors), `check-links` (SUCCESS), build, `test:e2e` (181 passed / 4 skipped), and `test:a11y` (40/40).
+
+- Implemented **ID Photo Studio backend** (`src/lib/crop/presets.ts`, `src/lib/crop/validation.ts`, `src/pages/api/crop/config.ts`, `src/pages/api/crop/usage.ts`, `src/pages/api/crop/remove.ts`, `src/content/experiments/id-photo-studio.md`, `tests/e2e/crop-api.spec.ts`):
+  - Canonical presets (`2x2` 600x600px, `1x1` 300x300px @300DPI) plus background options and export caps in one importable module; pure validators with zero runtime dependencies.
+  - `GET /api/crop/config` serves the canonical config with CDN caching; `POST /api/crop/usage` accepts metadata-only telemetry with production-only KV rate limiting; `POST /api/crop/remove` is a 501 contract stub reserving the paid-fallback seam. No image bytes touch the server; no `wrangler.jsonc` changes.
+  - Lab entry renders at `/experiments/id-photo-studio/`; full verification passed (format, lint, check with 0 errors, build, crop E2E 20/20, a11y 40/40).
+
 - Fixed **Contact Form Delivery** (`src/pages/api/contact.ts`, `wrangler.jsonc`, `src/pages/contact.astro`, `docs/architecture/TechStack.md`, [ADR 0007](decisions/0007-deliver-contact-via-brevo-transactional-api.md)): production submissions silently failed (`delivered: false` archived to KV, visitor saw a false "Message delivered" panel) because `samananias.is-a.dev` — a CNAME to `gebportfolio.pages.dev` — cannot host the Cloudflare zone and DNS records that Email Routing requires.
   - Replaced the `CONTACT_EMAIL` `send_email` binding with a direct `fetch` call to the Brevo transactional email API (free plan, 300 emails/day, no domain authentication required — see [ADR 0007](decisions/0007-deliver-contact-via-brevo-transactional-api.md)): mail is sent from the verified `samananiascases@gmail.com` sender with the visitor's address in `Reply-To`.
   - Moved the Brevo API key out of the repository entirely: it lives as the `BREVO_API_KEY` secret in the Cloudflare dashboard (Workers & Pages → gebportfolio → Settings → Variables and Secrets).

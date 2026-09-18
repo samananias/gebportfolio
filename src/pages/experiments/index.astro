@@ -1,25 +1,422 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
-import UnderConstruction from "../../components/UnderConstruction.astro";
+import Container from "../../components/primitives/Container.astro";
+import DoodleIcon from "../../components/ui/DoodleIcon.astro";
+import ChessIcons from "../../components/navigation/ChessIcons.astro";
+import DividerChessboard from "../../components/primitives/DividerChessboard.astro";
+import { getCollection } from "astro:content";
+import { formatEntryNumber } from "../../lib/lab/accession";
+import { getLabStampClass } from "../../lib/lab/stamps";
+import { sortExperimentsLedger } from "../../lib/lab/order";
+import { externalLinkAttrs } from "../../lib/lab/links";
 
 /**
- * Lab / Experiments — temporarily paused.
- * Original implementation preserved at src/content/_archive/experiments-index.astro.
+ * Lab / Experiments — Field Ledger.
+ * Woodcut system kept; card-grid replaced with a bound
+ * engraver's notebook: ruled entries, state stamps, apparatus tags.
  */
+
+// Fetch experiments from content collection
+const experiments = await getCollection("experiments");
+
+// Ledger order: active first, then completed, then abandoned; title as tiebreak.
+// Entry numbers are stable accession IDs derived from the content slug so a
+// new experiment never renumbers existing rows.
+const orderedExperiments = sortExperimentsLedger(experiments);
+
+// Extract unique technologies for filters
+const technologies = Array.from(
+  new Set(experiments.flatMap((exp) => exp.data.technologies ?? []))
+).sort();
+
+const totalCount = experiments.length;
+const activeCount = experiments.filter((exp) => exp.data.status === "active").length;
+const completedCount = experiments.filter((exp) => exp.data.status === "completed").length;
+const abandonedCount = experiments.filter((exp) => exp.data.status === "abandoned").length;
 ---
 
 <BaseLayout
-  title="Lab & Experiments"
-  description="Sandbox prototypes, UI stress tests, and systems mockups — in development."
+  title="Lab"
+  description="Technical explorations, UI experiments, and systems design prototypes."
 >
-  <UnderConstruction
-    eyebrow="Lab · Paused"
-    title="This section is being built."
-    summary="The lab bench is empty right now — and deliberately so. Experiments earn their listing when they can answer a specific question."
-    description="When this reopens, expect work-in-progress prototypes, viewport stress tests, and half-formed components with architectural disclaimers attached. Until then, nothing here makes a claim it cannot back."
-    piece="rook"
-    eta="Under construction · bench cleared for the next experiment"
-    cta={{ label: "Back to home", href: "/" }}
-    secondaryCta={{ label: "View shipped work", href: "/projects" }}
-  />
+  <Container width="default" class="animate-reveal space-y-10 py-10 md:space-y-12 md:py-14">
+    <!-- Ledger masthead -->
+    <header class="space-y-8">
+      <div class="grid grid-cols-1 items-start gap-8 md:grid-cols-[auto_1fr] md:gap-10">
+        <figure
+          class="border-structural border-border-custom bg-surface relative flex size-24 shrink-0 items-center justify-center rounded-sm"
+          style="box-shadow: 4px 4px 0 var(--color-ink);"
+          aria-hidden="true"
+        >
+          <ChessIcons piece="queen" variant="woodcut" class="size-14 md:size-16" />
+          <span
+            class="border-border-custom bg-surface-subtle absolute -top-1.5 -left-1.5 size-3 rounded-[1px] border"
+          ></span>
+          <span
+            class="border-border-custom bg-surface-subtle absolute -right-1.5 -bottom-1.5 size-3 rounded-[1px] border"
+          ></span>
+        </figure>
+        <div class="space-y-4">
+          <p class="text-caption text-primary font-mono font-bold tracking-[0.2em] uppercase">
+            Lab — Field ledger
+          </p>
+          <h1 class="text-h1 font-display text-text font-bold tracking-tight text-balance">
+            The Laboratory
+          </h1>
+          <p class="text-body-large text-text-muted max-w-[62ch] leading-relaxed">
+            Bound prototypes, apparatus notes, and interface trials. Each entry is numbered, stamped
+            by state, and filed with its working parts.
+          </p>
+          <ul class="flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-xs">
+            <li class="text-text inline-flex items-center gap-2 font-semibold">
+              <DoodleIcon name="health/flask" class="text-primary size-4 shrink-0" />
+              <span>
+                <span class="sr-only">Total ledger entries: </span>
+                {totalCount} entries
+              </span>
+            </li>
+            <li class="text-text-muted inline-flex items-center gap-2 font-semibold">
+              <DoodleIcon name="interface/bell" class="text-primary size-4 shrink-0" />
+              <span>
+                <span class="sr-only">Active ledger entries: </span>
+                {activeCount} active
+              </span>
+            </li>
+            <li class="text-text-muted inline-flex items-center gap-2 font-semibold">
+              <DoodleIcon name="interface/tick" class="text-primary size-4 shrink-0" />
+              <span>
+                <span class="sr-only">Completed ledger entries: </span>
+                {completedCount} completed
+              </span>
+            </li>
+            <li class="text-text-muted inline-flex items-center gap-2 font-semibold">
+              <DoodleIcon name="interface/folder" class="text-primary size-4 shrink-0" />
+              <span>
+                <span class="sr-only">Shelved ledger entries: </span>
+                {abandonedCount} shelved
+              </span>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="bg-border-custom h-[var(--stroke-hatch)] w-full" aria-hidden="true"></div>
+    </header>
+
+    <!-- Filter bench -->
+    <section aria-label="Filter experiments" class="space-y-5">
+      <div class="space-y-2" role="group" aria-label="Filter by state">
+        <h2 class="text-caption text-text font-mono font-semibold tracking-[0.18em] uppercase">
+          State
+        </h2>
+        <div class="flex flex-wrap gap-2" id="status-filters">
+          <button
+            type="button"
+            data-status-filter="all"
+            aria-pressed="true"
+            class="text-small bg-primary text-bg border-structural border-text cursor-pointer rounded-md px-4 py-1.5 font-semibold transition-[background-color,color,border-color] duration-200"
+          >
+            All states
+          </button>
+          <button
+            type="button"
+            data-status-filter="active"
+            aria-pressed="false"
+            class="text-small bg-surface border-structural border-border-custom text-text-muted hover:text-text cursor-pointer rounded-md px-4 py-1.5 font-medium transition-[background-color,color,border-color] duration-200"
+          >
+            Active
+          </button>
+          <button
+            type="button"
+            data-status-filter="completed"
+            aria-pressed="false"
+            class="text-small bg-surface border-structural border-border-custom text-text-muted hover:text-text cursor-pointer rounded-md px-4 py-1.5 font-medium transition-[background-color,color,border-color] duration-200"
+          >
+            Completed
+          </button>
+          <button
+            type="button"
+            data-status-filter="abandoned"
+            aria-pressed="false"
+            class="text-small bg-surface border-structural border-border-custom text-text-muted hover:text-text cursor-pointer rounded-md px-4 py-1.5 font-medium transition-[background-color,color,border-color] duration-200"
+          >
+            Shelved
+          </button>
+        </div>
+      </div>
+
+      {
+        technologies.length > 0 && (
+          <div class="space-y-2" role="group" aria-label="Filter by apparatus">
+            <h2 class="text-caption text-text font-mono font-semibold tracking-[0.18em] uppercase">
+              Apparatus
+            </h2>
+            <div class="flex flex-wrap gap-2" id="tech-filters">
+              <button
+                type="button"
+                data-tech-filter="all"
+                aria-pressed="true"
+                class="text-small bg-primary text-bg border-structural border-text cursor-pointer rounded-md px-4 py-1.5 font-semibold transition-[background-color,color,border-color] duration-200"
+              >
+                All apparatus
+              </button>
+              {technologies.map((tech) => (
+                <button
+                  type="button"
+                  data-tech-filter={tech}
+                  aria-pressed="false"
+                  class="text-small bg-surface border-structural border-border-custom text-text-muted hover:text-text cursor-pointer rounded-md px-4 py-1.5 font-medium transition-[background-color,color,border-color] duration-200"
+                >
+                  {tech}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      }
+    </section>
+
+    <!-- Live result count for filter feedback -->
+    <p
+      id="experiments-count"
+      role="status"
+      aria-live="polite"
+      class="text-caption text-text-muted font-mono tracking-[0.18em] uppercase"
+    >
+      Showing {totalCount} of {totalCount}
+      {totalCount === 1 ? "entry" : "entries"}
+    </p>
+
+    <!-- Ledger entries -->
+    {
+      orderedExperiments.length === 0 ? (
+        <div class="border-structural border-border-custom bg-surface rounded-sm p-12 text-center">
+          <DoodleIcon name="health/test-tube" class="text-text-muted mx-auto size-10" />
+          <p class="text-body text-text-muted mt-4">No entries filed yet. The bench is clear.</p>
+        </div>
+      ) : (
+        <ol
+          id="experiments-grid"
+          class="border-structural border-border-custom bg-surface overflow-hidden rounded-sm border"
+        >
+          {orderedExperiments.map((exp) => (
+            <li
+              data-experiment-card
+              data-status={exp.data.status}
+              data-technologies={exp.data.technologies ? exp.data.technologies.join(",") : ""}
+              class="border-border-custom border-b transition-colors last:border-b-0"
+            >
+              <div class="group grid grid-cols-1 gap-4 p-5 transition-colors duration-200 sm:p-6 lg:grid-cols-[5.5rem_1fr_auto] lg:items-center lg:gap-8">
+                <span class="flex items-center gap-3 lg:flex-col lg:items-start lg:gap-2">
+                  <span class="text-micro text-text-muted font-mono font-bold tracking-[0.18em] uppercase">
+                    {formatEntryNumber(exp.id)}
+                  </span>
+                  <span class={getLabStampClass(exp.data.status)}>
+                    {exp.data.status === "abandoned" ? "shelved" : exp.data.status}
+                  </span>
+                </span>
+                <span class="min-w-0 space-y-2.5">
+                  <a
+                    href={`/experiments/${exp.id}`}
+                    class="text-h4 font-heading text-text decoration-none hover:text-primary focus-visible:ring-focus focus-visible:ring-offset-bg block w-fit font-bold transition-colors duration-200 outline-none hover:underline hover:decoration-dotted hover:underline-offset-4 focus-visible:ring-2 focus-visible:ring-offset-2"
+                  >
+                    {exp.data.title}
+                  </a>
+                  {exp.data.summary ? (
+                    <span class="text-small text-text-muted line-clamp-2 block leading-relaxed">
+                      {exp.data.summary}
+                    </span>
+                  ) : exp.data.warning ? (
+                    <span class="text-small text-text-muted flex items-start gap-2 leading-relaxed">
+                      <DoodleIcon
+                        name="interface/caution"
+                        class="text-primary mt-0.5 size-4 shrink-0"
+                      />
+                      <span>{exp.data.warning}</span>
+                    </span>
+                  ) : (
+                    <span class="text-small text-text-muted block leading-relaxed">
+                      Filed prototype — open the entry for method, apparatus, and links.
+                    </span>
+                  )}
+                  {exp.data.technologies && exp.data.technologies.length > 0 && (
+                    <span class="flex flex-wrap gap-1.5 pt-0.5">
+                      {exp.data.technologies.map((tech) => (
+                        <span class="bg-surface-subtle border-border-custom text-caption text-text-muted rounded-sm border px-2 py-0.5 font-medium">
+                          {tech}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </span>
+                <span class="flex items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
+                  {exp.data.demoLinks && exp.data.demoLinks.length > 0 && (
+                    <span class="flex flex-col items-start gap-2.5 lg:items-end">
+                      <a
+                        href={`/experiments/${exp.id}`}
+                        aria-label={`Open entry: ${exp.data.title}`}
+                        class="text-small text-primary hover:text-primary-hover focus-visible:ring-focus focus-visible:ring-offset-bg inline-flex items-center gap-1.5 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                      >
+                        Open entry
+                        <DoodleIcon
+                          name="arrows/arrow-right"
+                          class="size-4 transition-transform duration-200 group-hover:translate-x-0.5"
+                        />
+                      </a>
+                      {exp.data.demoLinks.map((link) => (
+                        <a
+                          href={link.url}
+                          {...externalLinkAttrs(link.url)}
+                          class="text-caption text-text-muted hover:text-primary inline-flex min-h-[24px] items-center gap-1.5 py-0.5 font-mono tracking-wide uppercase underline decoration-dotted underline-offset-2"
+                        >
+                          {link.label}
+                          <DoodleIcon name="interface/link" class="size-3.5 shrink-0" />
+                        </a>
+                      ))}
+                    </span>
+                  )}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )
+    }
+
+    <p
+      id="experiments-empty"
+      role="status"
+      aria-live="polite"
+      class="border-structural border-border-custom bg-surface hidden rounded-sm p-10 text-center"
+    >
+      <span
+        class="font-hand text-h4 text-primary inline-block origin-left -rotate-1"
+        aria-hidden="true"
+      >
+        no rows match that cut
+      </span>
+      <span class="text-body text-text-muted mt-3 block">
+        No entries match this state and apparatus. Loosen one filter to keep reading.
+      </span>
+      <span class="mt-5 flex justify-center">
+        <button
+          type="button"
+          id="experiments-reset"
+          class="text-small bg-surface text-text border-structural border-border-custom inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-medium hover:shadow-[2px_2px_0_var(--color-text)]"
+        >
+          <DoodleIcon name="interface/sync" class="size-4" />
+          Reset ledger filters
+        </button>
+      </span>
+    </p>
+
+    <DividerChessboard />
+
+    <p class="text-micro text-text-muted text-center font-mono tracking-[0.22em] uppercase">
+      Filed under Lab · {totalCount}
+      {totalCount === 1 ? "entry" : "entries"}
+    </p>
+  </Container>
+
+  <!-- Ledger filtering -->
+  <script is:inline>
+    (() => {
+      let currentStatus = "all";
+      let currentTech = "all";
+
+      const statusButtons = document.querySelectorAll("[data-status-filter]");
+      const techButtons = document.querySelectorAll("[data-tech-filter]");
+      const cards = document.querySelectorAll("[data-experiment-card]");
+      const emptyState = document.getElementById("experiments-empty");
+      const resultCount = document.getElementById("experiments-count");
+      const resetButton = document.getElementById("experiments-reset");
+      const totalCount = cards.length;
+
+      const inactiveButtonClass =
+        "text-small bg-surface border-structural border-border-custom text-text-muted hover:text-text cursor-pointer rounded-md px-4 py-1.5 font-medium transition-[background-color,color,border-color] duration-200";
+      const activeButtonClass =
+        "text-small bg-primary text-bg border-structural border-text cursor-pointer rounded-md px-4 py-1.5 font-semibold transition-[background-color,color,border-color] duration-200";
+
+      const setPressed = (buttons, activeButton) => {
+        buttons.forEach((button) => {
+          button.setAttribute("aria-pressed", button === activeButton ? "true" : "false");
+        });
+      };
+
+      const applyFilters = () => {
+        let visibleCount = 0;
+        cards.forEach((card) => {
+          const cardStatus = card.getAttribute("data-status") || "";
+          const techsStr = card.getAttribute("data-technologies") || "";
+          const cardTechs = techsStr.split(",").filter(Boolean);
+
+          const matchesStatus = currentStatus === "all" || cardStatus === currentStatus;
+          const matchesTech = currentTech === "all" || cardTechs.includes(currentTech);
+
+          if (matchesStatus && matchesTech) {
+            card.classList.remove("hidden");
+            visibleCount += 1;
+          } else {
+            card.classList.add("hidden");
+          }
+        });
+
+        if (emptyState) {
+          emptyState.classList.toggle("hidden", visibleCount !== 0);
+        }
+
+        if (resultCount) {
+          const noun = visibleCount === 1 ? "entry" : "entries";
+          resultCount.textContent = `Showing ${visibleCount} of ${totalCount} ${noun}`;
+        }
+      };
+
+      const resetFilters = () => {
+        currentStatus = "all";
+        currentTech = "all";
+        statusButtons.forEach((button) => {
+          button.className =
+            button.getAttribute("data-status-filter") === "all"
+              ? activeButtonClass
+              : inactiveButtonClass;
+        });
+        techButtons.forEach((button) => {
+          button.className =
+            button.getAttribute("data-tech-filter") === "all"
+              ? activeButtonClass
+              : inactiveButtonClass;
+        });
+        setPressed(statusButtons, document.querySelector('[data-status-filter="all"]'));
+        setPressed(techButtons, document.querySelector('[data-tech-filter="all"]'));
+        applyFilters();
+      };
+
+      statusButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          currentStatus = btn.getAttribute("data-status-filter");
+          statusButtons.forEach((b) => {
+            b.className = inactiveButtonClass;
+          });
+          btn.className = activeButtonClass;
+          setPressed(statusButtons, btn);
+          applyFilters();
+        });
+      });
+
+      techButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          currentTech = btn.getAttribute("data-tech-filter");
+          techButtons.forEach((b) => {
+            b.className = inactiveButtonClass;
+          });
+          btn.className = activeButtonClass;
+          setPressed(techButtons, btn);
+          applyFilters();
+        });
+      });
+
+      resetButton?.addEventListener("click", () => {
+        resetFilters();
+      });
+    })();
+  </script>
 </BaseLayout>

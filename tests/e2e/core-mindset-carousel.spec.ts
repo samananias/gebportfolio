@@ -253,29 +253,29 @@ test.describe("Core Mindset Carousel", () => {
         return match ? parseFloat(match[1]) / 1.5 : 0;
       });
 
-    // Park at slide 1 so the smoothed position starts near zero.
+    // Park at slide 1 so the smoothed position starts near zero, then jump
+    // straight to slide 5's mapped position; mid-flight the track must hold a
+    // fractional position strictly between slide 1 and slide 5. The whole
+    // gesture retries as a unit — on throttled CI runners a single lost race
+    // (sampling before the scroll handler applies a target, or RAF starvation)
+    // must not fail the probe.
     await expect(async () => {
       await section.evaluate((el) => {
         const rect = el.getBoundingClientRect();
         window.scrollTo({ top: window.scrollY + rect.top, behavior: "auto" });
       });
-      const position = await readPosition();
-      expect(position).toBeLessThan(0.05);
-    }).toPass({ timeout: 15_000 });
+      expect(await readPosition()).toBeLessThan(0.05);
 
-    // Jump straight to slide 5's mapped position; mid-flight the track must
-    // hold a fractional position strictly between slide 1 and slide 5.
-    await section.evaluate((el) => {
-      const rect = el.getBoundingClientRect();
-      const scrollable = rect.height - window.innerHeight;
-      window.scrollTo({ top: window.scrollY + rect.top + scrollable, behavior: "auto" });
-    });
+      await section.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const scrollable = rect.height - window.innerHeight;
+        window.scrollTo({ top: window.scrollY + rect.top + scrollable, behavior: "auto" });
+      });
 
-    await expect(async () => {
       const position = await readPosition();
       expect(position).toBeGreaterThan(0.2);
       expect(position).toBeLessThan(3.8);
-    }).toPass({ timeout: 3_000 });
+    }).toPass({ timeout: 10_000 });
   });
 
   test("should fire exactly one pawn hop per fast multi-slide scroll gesture", async ({ page }) => {

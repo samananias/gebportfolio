@@ -73,6 +73,9 @@ export default defineConfig({
     env: {
       ...process.env,
       ASTRO_DEV_BACKGROUND: "1",
+      // Disables the Astro dev toolbar (see astro.config.ts devToolbar gate):
+      // its fixed overlay intercepts pointer events during E2E interactions.
+      PLAYWRIGHT_E2E: "1",
     },
   },
 });

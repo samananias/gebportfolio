@@ -1,0 +1,39 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Container from "../components/primitives/Container.astro";
+import DividerChessboard from "../components/primitives/DividerChessboard.astro";
+import DoodleIcon from "../components/ui/DoodleIcon.astro";
+import RemoveStudio from "../components/islands/RemoveStudio";
+---
+
+<BaseLayout
+  title="Remove Background"
+  description="Remove the background from a photo on your device — no account, no upload. Download a transparency-preserving PNG."
+>
+  <Container width="default" class="animate-reveal space-y-10 py-12">
+    <header class="space-y-4">
+      <span
+        class="border-ink/20 bg-surface-subtle text-caption text-primary inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono font-semibold tracking-widest uppercase select-none"
+      >
+        <DoodleIcon name="image" class="text-primary size-3.5" />
+        Lab · Background Remover
+      </span>
+      <h1 class="text-h1 font-display text-text font-bold tracking-tight">Remove Background</h1>
+      <p class="text-body-large text-text-muted max-w-2xl leading-relaxed">
+        Upload a photo, cut out the background on your device, preview the result, and download a
+        PNG that keeps transparency. Nothing is uploaded — the photo never leaves this browser.
+      </p>
+    </header>
+
+    <DividerChessboard />
+
+    <RemoveStudio client:visible />
+
+    <p class="text-small text-text-muted max-w-2xl leading-relaxed">
+      Looking for the write-up? Read the
+      <a href="/experiments/id-photo-studio/" class="text-primary underline"> Lab notes</a>
+      for the privacy model and backend contract. Need a framed ID photo instead? Use the
+      <a href="/crop" class="text-primary underline"> ID Photo Studio</a>.
+    </p>
+  </Container>
+</BaseLayout>

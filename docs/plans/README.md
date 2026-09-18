@@ -51,3 +51,10 @@ For quick iteration, copy the standard template from [0000-template.md](0000-tem
 | `0004.2` | [Chess Checkmate Handling, Match Reset & Pawn Promotion Specification](0004.2-chess-checkmate-and-pawn-promotion-plan.md)        | `Approved`    | 2026-08-13 |
 | `0004.3` | [Chess Checkmate, Pawn Promotion & Contributor Tracking Implementation Roadmap](0004.3-chess-checkmate-and-promotion-roadmap.md) | `Active`      | 2026-08-13 |
 | `0005`   | [Experience Page Architecture, Schema & Content Specification](0005-experience-page-specification.md)                            | `Approved`    | 2026-07-31 |
+| `0006`   | [ID Photo Studio Specification](0006-id-photo-studio-specification.md)                                                           | `Draft`       | 2026-09-10 |
+| `0006.1` | [ID Photo Studio Backend Roadmap & Checkpoints](0006.1-id-photo-studio-backend-roadmap.md)                                       | `Draft`       | 2026-09-10 |
+| `0007`   | [Image Editing Improvements](0007-image-editing-improvements.md)                                                                 | `Draft`       | 2026-09-11 |
+| `0007.1` | [Image Editing Improvements Roadmap & Checkpoints](0007.1-image-editing-roadmap.md)                                              | `Draft`       | 2026-09-11 |
+| `0008`   | [Lab Ledger & Entry Records Specification](0008-lab-ledger-specification.md)                                                     | `In Progress` | 2026-09-15 |
+| `0009`   | [Crop Page Redesign — Two-Mode ID Photo Studio](0009-crop-page-redesign-specification.md)                                        | `In Progress` | 2026-09-15 |
+| `0009.1` | [Crop Page Redesign Roadmap & Checkpoints](0009.1-crop-page-redesign-roadmap.md)                                                 | `In Progress` | 2026-09-15 |

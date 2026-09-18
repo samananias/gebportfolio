@@ -1,5 +1,11 @@
 ---
 title: "Color Scheme & Theme Tokens Sandbox"
+summary: "What does it take to keep a design system's colors bound to semantic roles — no hardcoded hex in markup, no tailwind.config.js — and prove it live?"
+objectives:
+  - "Demonstrate the three-layer token pipeline: raw palette, semantic roles, Tailwind theme bindings."
+  - "Verify fluid type scales with clamp() across viewport widths."
+  - "Prove the CSS-first approach needs no tailwind.config.js to stay in sync."
+keyTakeaway: "A CSS-first token chain keeps every color bound to a semantic role — markup never needs a hardcoded hex."
 status: "active"
 warning: "This sandbox references real-time CSS custom property changes. Overriding native browser parameters can result in unexpected color mapping behavior."
 technologies:
@@ -8,7 +14,7 @@ technologies:
   - "Fluid Typography"
 demoLinks:
   - label: "Design System Page"
-    url: "https://samananias.com/experiments"
+    url: "/design-system"
 ---
 
 ## Introduction

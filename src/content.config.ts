@@ -186,13 +186,24 @@ const experiments = defineCollection({
   schema: z.object({
     title: z.string(),
     status: z.enum(["active", "completed", "abandoned"]),
+    summary: z.string().optional(), // 1-2 sentence field note shown as the entry lede
+    objectives: z.array(z.string()).default([]), // what the entry set out to test
+    keyTakeaway: z.string().optional(), // bottom-line conclusion stamped at the record's end
     warning: z.string().optional(),
     technologies: z.array(z.string()).default([]),
     demoLinks: z
       .array(
         z.object({
           label: z.string(),
-          url: z.string().url(),
+          // Absolute http(s) links open off-site; root-relative paths (e.g.
+          // "/crop") resolve against the serving host, so they stay correct
+          // on localhost, preview deploys, and production alike.
+          url: z
+            .string()
+            .refine(
+              (value) => /^https?:\/\//i.test(value) || value.startsWith("/"),
+              "url must be an absolute http(s) URL or a root-relative path (e.g. /crop)"
+            ),
         })
       )
       .optional(),

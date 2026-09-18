@@ -86,10 +86,11 @@ Update the `"version"` field in [`package.json`](../../package.json) to match th
 Ensure all CI gates pass clean:
 
 ```bash
-cmd /c "npx pnpm run format"
-cmd /c "npx pnpm run lint"
-cmd /c "npx pnpm run check"
-cmd /c "npx pnpm run build"
+npx pnpm run format
+npx pnpm run lint
+npx pnpm run check
+npx pnpm run build
+# Note: If Git Bash cannot be used (e.g. PowerShell), wrap with cmd /c "..."
 ```
 
 #### Step 4: Commit & Tag the Release

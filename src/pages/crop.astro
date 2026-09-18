@@ -1,0 +1,327 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Container from "../components/primitives/Container.astro";
+import DividerChessboard from "../components/primitives/DividerChessboard.astro";
+import DoodleIcon from "../components/ui/DoodleIcon.astro";
+import CropStudio from "../components/islands/CropStudio";
+import { getCropStampClass } from "../lib/crop/stamps";
+import { EXPORT, ID_PRESETS, REMOVAL_MODEL } from "../lib/crop/presets";
+
+const presets = Object.values(ID_PRESETS);
+const maxInputMb = Math.round(EXPORT.maxInputBytes / (1024 * 1024));
+---
+
+<BaseLayout
+  title="ID Photo Studio"
+  description="Free ID-photo tool: remove the background on your device, crop to 2x2 or 1x1, and export a print-ready file."
+>
+  <noscript>
+    <style>
+      /* Without JavaScript both panels stack below, so a clickable tab
+         pair would only be dead controls — rendered as nothing instead. */
+      .crop-mode-switch {
+        display: none !important;
+      }
+    </style>
+  </noscript>
+  <Container width="wide" class="animate-reveal space-y-10 py-12">
+    <!-- Back navigation: the same pattern as the Lab entry pages, so leaving
+         the tool never competes with the bench below (spec 0009 Feature 9). -->
+    <div>
+      <a
+        href="/experiments"
+        class="text-small text-primary hover:text-primary-hover focus-visible:ring-focus focus-visible:ring-offset-bg inline-flex items-center gap-1.5 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      >
+        <DoodleIcon name="arrows/arrow-left" class="size-4" />
+        Back to Lab
+      </a>
+    </div>
+
+    <header class="space-y-4">
+      <span
+        class="border-ink/20 bg-surface-subtle text-caption text-primary inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono font-semibold tracking-widest uppercase select-none"
+      >
+        <DoodleIcon name="image" class="text-primary size-3.5" />
+        Lab · ID Photo Studio
+      </span>
+      <h1 class="text-h1 font-display text-text font-bold tracking-tight">ID Photo Studio</h1>
+      <p class="text-body-large text-text-muted max-w-2xl leading-relaxed">
+        Upload a portrait, cut out the background on your device, frame the face in a 2x2 or 1x1
+        square, and export a print-ready file. Nothing is uploaded — the photo never leaves this
+        browser.
+      </p>
+    </header>
+
+    <DividerChessboard />
+
+    <div class="space-y-6">
+      <div
+        id="crop-mode-tablist"
+        class="crop-mode-switch border-structural border-border-custom bg-surface-subtle inline-flex rounded-md border p-1"
+        role="tablist"
+        aria-label="ID Photo Studio modes"
+      >
+        <button
+          id="crop-tab-studio"
+          type="button"
+          role="tab"
+          data-crop-mode="studio"
+          aria-selected="true"
+          aria-controls="crop-mode-studio"
+          tabindex="0"
+          class="text-small cursor-pointer rounded-sm px-5 py-2 font-sans font-semibold transition-[background-color,color] duration-200"
+        >
+          Studio
+        </button>
+        <button
+          id="crop-tab-record"
+          type="button"
+          role="tab"
+          data-crop-mode="record"
+          aria-selected="false"
+          aria-controls="crop-mode-record"
+          tabindex="-1"
+          class="text-small cursor-pointer rounded-sm px-5 py-2 font-sans font-semibold transition-[background-color,color] duration-200"
+        >
+          How it works
+        </button>
+      </div>
+
+      <section
+        id="crop-mode-studio"
+        role="tabpanel"
+        aria-labelledby="crop-tab-studio"
+        tabindex="0"
+        class="focus-visible:ring-focus focus-visible:ring-offset-bg rounded-md outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      >
+        <h2 class="font-heading text-h4 text-text mb-4 font-bold">Studio</h2>
+        <CropStudio client:idle />
+      </section>
+
+      <!-- No `hidden` in the markup: without JavaScript both panels stack.
+           The tabs script applies the hidden state when it runs. -->
+      <section
+        id="crop-mode-record"
+        role="tabpanel"
+        aria-labelledby="crop-tab-record"
+        tabindex="0"
+        class="focus-visible:ring-focus focus-visible:ring-offset-bg space-y-6 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      >
+        <h2 class="font-heading text-h4 text-text font-bold">How it works</h2>
+        <p class="text-body text-text-muted max-w-2xl leading-relaxed">
+          Every number below comes from the shipped code — the same presets file the tool imports.
+          The evidence lives here, next to the artifact.
+        </p>
+        <article class="border-structural border-border-custom bg-surface relative rounded-sm p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p
+              aria-hidden="true"
+              class="text-micro text-text-muted font-mono font-bold tracking-[0.2em] uppercase"
+            >
+              01 ·
+            </p>
+            <span class={getCropStampClass("done")}>data</span>
+          </div>
+          <h3 class="font-heading text-h4 text-text mt-1 font-bold">The presets</h3>
+          <table class="text-small mt-3 w-full border-collapse text-left">
+            <thead>
+              <tr class="text-caption text-text-muted font-mono tracking-wider uppercase">
+                <th scope="col" class="border-border-custom border-b py-2 pr-4">Preset</th>
+                <th scope="col" class="border-border-custom border-b py-2 pr-4">Print size</th>
+                <th scope="col" class="border-border-custom border-b py-2">Pixels at 300 DPI</th>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                presets.map((preset) => (
+                  <tr>
+                    <th
+                      scope="row"
+                      class="border-border-custom text-text border-b py-2 pr-4 font-medium"
+                    >
+                      {preset.label}
+                    </th>
+                    <td class="border-border-custom border-b py-2 pr-4">
+                      {preset.inches[0]} by {preset.inches[1]} in ({preset.millimetres[0]} by{" "}
+                      {preset.millimetres[1]} mm)
+                    </td>
+                    <td class="border-border-custom border-b py-2 font-mono">
+                      {preset.pixelsAt300Dpi[0]} by {preset.pixelsAt300Dpi[1]} px
+                    </td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </article>
+
+        <article class="border-structural border-border-custom bg-surface relative rounded-sm p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p
+              aria-hidden="true"
+              class="text-micro text-text-muted font-mono font-bold tracking-[0.2em] uppercase"
+            >
+              02 ·
+            </p>
+            <span class={getCropStampClass("done")}>contract</span>
+          </div>
+          <h3 class="font-heading text-h4 text-text mt-1 font-bold">The export contract</h3>
+          <ul class="text-small text-text-muted mt-3 list-disc space-y-1.5 pl-5 leading-relaxed">
+            <li>
+              Accepts JPEG or PNG up to {maxInputMb} MB, longest side up to{" "}
+              {EXPORT.maxInputDimensionPx} px.
+            </li>
+            <li>
+              Exports at {EXPORT.printDpi} DPI as PNG (transparency preserved) or JPEG (flattened onto
+              white) — every file is generated in this browser from the framed preview.
+            </li>
+            <li>
+              The export targets are fixed: 600 by 600 px for 2x2, 300 by 300 px for 1x1 — the frame
+              never scales the promise to fit a photo.
+            </li>
+          </ul>
+        </article>
+
+        <article class="border-structural border-border-custom bg-surface relative rounded-sm p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p
+              aria-hidden="true"
+              class="text-micro text-text-muted font-mono font-bold tracking-[0.2em] uppercase"
+            >
+              03 ·
+            </p>
+            <span class={getCropStampClass("done")}>on-device</span>
+          </div>
+          <h3 class="font-heading text-h4 text-text mt-1 font-bold">The privacy model</h3>
+          <ul class="text-small text-text-muted mt-3 list-disc space-y-1.5 pl-5 leading-relaxed">
+            <li>
+              Removal runs on this device via {REMOVAL_MODEL.name} ({REMOVAL_MODEL.license},{" "}
+              {REMOVAL_MODEL.runtime}).
+            </li>
+            <li>
+              The model download (~{REMOVAL_MODEL.approximateDownloadMb} MB, first run only) is disclosed
+              and confirmed before it starts, and can be cancelled while it runs.
+            </li>
+            <li>
+              No image bytes ever reach the server. Telemetry is metadata only: an event name, the
+              preset, and elapsed milliseconds.
+            </li>
+          </ul>
+        </article>
+
+        <article class="border-structural border-border-custom bg-surface relative rounded-sm p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p
+              aria-hidden="true"
+              class="text-micro text-text-muted font-mono font-bold tracking-[0.2em] uppercase"
+            >
+              04 ·
+            </p>
+            <span class={getCropStampClass("done")}>sources</span>
+          </div>
+          <h3 class="font-heading text-h4 text-text mt-1 font-bold">Where the evidence lives</h3>
+          <p class="text-small text-text-muted mt-3 leading-relaxed">
+            The Lab note records the decisions behind this tool — the thin backend, the on-device
+            removal model, and what was learned building it. Just want a transparent cutout without
+            the framing step? The
+            <a href="/remove-background" class="text-primary underline">Background Remover</a> is the
+            sibling tool.
+          </p>
+          <a
+            href="/experiments/id-photo-studio/"
+            class="bg-surface text-text border-structural border-border-custom mt-4 inline-flex h-11 items-center gap-2 rounded-md px-5 font-sans font-medium transition-[transform,box-shadow] duration-200 hover:shadow-[2px_2px_0_var(--color-text)]"
+          >
+            <DoodleIcon name="files/file-image" class="size-4" />
+            Read the Lab notes
+          </a>
+        </article>
+      </section>
+    </div>
+
+    <p class="text-small text-text-muted max-w-2xl leading-relaxed">
+      Looking for the write-up? Read the
+      <a href="/experiments/id-photo-studio/" class="text-primary underline"> Lab notes</a>
+      for the privacy model and backend contract.
+    </p>
+  </Container>
+
+  <script>
+    // Conforming tabs: selection without navigation, roving tabindex, and a
+    // deep link. Studio is the default; an invalid `?mode` value falls back
+    // silently (spec 0009 §1). Without JavaScript both panels stack.
+    const MODE_STORAGE_KEY = "crop-mode";
+    const tablist = document.getElementById("crop-mode-tablist");
+    const tabs = Array.from(tablist?.querySelectorAll<HTMLButtonElement>("[role='tab']") ?? []);
+    const panelFor = (tab: HTMLButtonElement) =>
+      document.getElementById(`crop-mode-${tab.dataset.cropMode}`);
+
+    function readStoredMode(): string | null {
+      try {
+        return window.localStorage.getItem(MODE_STORAGE_KEY);
+      } catch {
+        return null; // A throwing store simply loses the memory.
+      }
+    }
+
+    function writeStoredMode(mode: string): void {
+      try {
+        window.localStorage.setItem(MODE_STORAGE_KEY, mode);
+      } catch {
+        // A throwing store must never break mode switching.
+      }
+    }
+
+    function isKnownMode(mode: string | null): mode is string {
+      return mode !== null && tabs.some((tab) => tab.dataset.cropMode === mode);
+    }
+
+    function applyMode(mode: string, persist: boolean): void {
+      for (const tab of tabs) {
+        const selected = tab.dataset.cropMode === mode;
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.tabIndex = selected ? 0 : -1;
+        const panel = panelFor(tab);
+        if (panel) panel.hidden = !selected;
+      }
+      if (persist) writeStoredMode(mode);
+      const url = new URL(window.location.href);
+      url.searchParams.set("mode", mode);
+      window.history.replaceState(null, "", url);
+    }
+
+    const requested = new URLSearchParams(window.location.search).get("mode");
+    const stored = readStoredMode();
+    const initialMode = isKnownMode(requested)
+      ? requested
+      : isKnownMode(stored)
+        ? stored
+        : "studio";
+    applyMode(initialMode, false);
+
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        if (!tab.dataset.cropMode) return;
+        applyMode(tab.dataset.cropMode, true);
+      });
+    }
+
+    tablist?.addEventListener("keydown", (event) => {
+      const key = event.key;
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
+      event.preventDefault();
+      const currentIndex = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+      const nextIndex =
+        key === "ArrowRight"
+          ? (currentIndex + 1) % tabs.length
+          : key === "ArrowLeft"
+            ? (currentIndex - 1 + tabs.length) % tabs.length
+            : key === "Home"
+              ? 0
+              : tabs.length - 1;
+      const next = tabs[nextIndex];
+      if (!next) return;
+      next.focus();
+      next.click();
+    });
+  </script>
+</BaseLayout>

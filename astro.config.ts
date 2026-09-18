@@ -116,11 +116,25 @@ export default defineConfig({
   adapter: cloudflare({
     imageService: "passthrough",
   }),
+  markdown: {
+    // Bind Shiki's syntax colors to the design tokens instead of a baked
+    // palette (github-dark's comment tokens fail WCAG AA). Token values live
+    // in src/styles/global.css under the `--astro-code-*` variables.
+    shikiConfig: {
+      theme: "css-variables",
+    },
+  },
   integrations: [
     react(),
     // Only include Keystatic integration in development/preview builds
     ...(process.env.NODE_ENV === "production" ? [] : [keystatic()]),
   ],
+  devToolbar: {
+    // Playwright's webServer boots `astro dev`; the toolbar's fixed overlay
+    // intercepts pointer events in E2E runs, so it is disabled under the
+    // PLAYWRIGHT_E2E gate set in playwright.config.ts. Regular dev keeps it.
+    enabled: process.env.PLAYWRIGHT_E2E !== "1",
+  },
   vite: {
     plugins: [tailwindcss(), syncSingletonsPlugin()],
   },

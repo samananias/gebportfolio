@@ -27,20 +27,21 @@ Always follow these rules strictly before and during any edits to this repositor
 
 ### 5. Verification Command Sequence (Definition of Done)
 
-Before claiming a task is done, you must run the full verification suite in order:
+Before claiming a task is done, you must run the full verification suite in order (run directly in Git Bash, or wrap with `cmd /c "<command>"` if falling back to cmd):
 
-1. `cmd /c "npx pnpm run format"` (formats the codebase using Prettier; CI enforces this via `npx pnpm run format:check`).
-2. `cmd /c "npx pnpm run lint"` (checks syntax with ESLint).
-3. `cmd /c "npx pnpm run check"` (runs Astro compiler typechecks and documentation link validation).
-4. `cmd /c "npx pnpm run build"` (verifies the project compiles successfully).
-5. `cmd /c "npx pnpm run test:e2e"` (runs Playwright E2E tests; Playwright auto-starts the app via its `webServer` config).
-6. `cmd /c "npx pnpm run test:a11y"` (runs axe-core accessibility audits; Playwright auto-starts the app via its `webServer` config).
+1. `npx pnpm run format` (formats the codebase using Prettier; CI enforces this via `npx pnpm run format:check`).
+2. `npx pnpm run lint` (checks syntax with ESLint).
+3. `npx pnpm run check` (runs Astro compiler typechecks and documentation link validation).
+4. `npx pnpm run build` (verifies the project compiles successfully).
+5. `npx pnpm run test:e2e` (runs Playwright E2E tests; Playwright auto-starts the app via its `webServer` config).
+6. `npx pnpm run test:a11y` (runs axe-core accessibility audits; Playwright auto-starts the app via its `webServer` config).
 
 CI enforces this same sequence plus a Lighthouse performance budget check on every push and pull request.
 
 ### 6. Terminal & Command Execution Rule
 
-- Always wrap CLI commands on Windows with `cmd /c` (e.g. `cmd /c "npx pnpm run format"`) to bypass PowerShell script execution policy restrictions (`.ps1` disabled), unless another terminal is explicitly requested.
+- **Primary Terminal (Git Bash):** Always use Git Bash on Windows to run CLI commands directly (e.g. `npx pnpm run format`). Do NOT use `cmd /c` or `cmd //c` inside Git Bash.
+- **Fallback (`cmd /c`):** If Git Bash cannot be used (e.g. when executing inside PowerShell where `.ps1` execution is restricted), wrap commands with `cmd /c` (e.g. `cmd /c "npx pnpm run format"`).
 
 ### 7. Emoji & UI Icon Rule
 
