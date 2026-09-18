@@ -24,7 +24,19 @@ const maxInputMb = Math.round(EXPORT.maxInputBytes / (1024 * 1024));
       }
     </style>
   </noscript>
-  <Container width="default" class="animate-reveal space-y-10 py-12">
+  <Container width="wide" class="animate-reveal space-y-10 py-12">
+    <!-- Back navigation: the same pattern as the Lab entry pages, so leaving
+         the tool never competes with the bench below (spec 0009 Feature 9). -->
+    <div>
+      <a
+        href="/experiments"
+        class="text-small text-primary hover:text-primary-hover focus-visible:ring-focus focus-visible:ring-offset-bg inline-flex items-center gap-1.5 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      >
+        <DoodleIcon name="arrows/arrow-left" class="size-4" />
+        Back to Lab
+      </a>
+    </div>
+
     <header class="space-y-4">
       <span
         class="border-ink/20 bg-surface-subtle text-caption text-primary inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono font-semibold tracking-widest uppercase select-none"

@@ -187,4 +187,27 @@ test.describe("ID Photo Studio frontend", () => {
     // softness is disclosed in the UI, never hidden.
     await expect(page.getByText(/Zoomed past the photo/)).toBeVisible();
   });
+
+  test("offers Back to Lab navigation and a frame-stage Start over reset", async ({ page }) => {
+    // Page-level navigation uses the same back-link pattern as the Lab
+    // entry pages (spec 0009 Feature 9).
+    const backLink = page.getByRole("link", { name: "Back to Lab" });
+    await expect(backLink).toBeVisible();
+    await expect(backLink).toHaveAttribute("href", "/experiments");
+
+    // After a load the bench rests on the frame stage, so the Start over
+    // control must be reachable there without re-expanding stage 01.
+    const pngBuffer = buildPng(64, 64, [200, 30, 30, 255]);
+    await page.locator("#crop-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Portrait loaded.")).toBeVisible();
+    await page.getByRole("button", { name: "Start over" }).click();
+    // Reset returns to the initial intake state and re-arms the file input.
+    await expect(page.getByText("Choose a portrait to begin.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Export 2x2 photo" })).toBeDisabled();
+    await expect(page.getByText("No portrait yet. Choose a photo first.")).toBeVisible();
+  });
 });

@@ -15,7 +15,14 @@ import {
   removeBackgroundInBrowser,
   type RemovalProgress,
 } from "../../lib/crop/removal";
-import type { BenchStageId, CropBox, CropError, Stage, StageStateResult } from "../crop/types";
+import type {
+  BenchStageId,
+  CropBox,
+  CropError,
+  RemovalPhase,
+  Stage,
+  StageStateResult,
+} from "../crop/types";
 import {
   FRAME_ANNOUNCE_DEBOUNCE_MS,
   STAGE_LABEL,
@@ -44,6 +51,7 @@ export default function CropStudio() {
   const [isReading, setIsReading] = useState(false);
   const [isModelCached, setIsModelCached] = useState(false);
   const [frameStatus, setFrameStatus] = useState("");
+  const [removalPhase, setRemovalPhase] = useState<RemovalPhase | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -53,6 +61,7 @@ export default function CropStudio() {
   const isReadingRef = useRef(false);
   const runTokenRef = useRef(0);
   const frameAnnounceTimerRef = useRef<number | null>(null);
+  const removalPhaseRef = useRef<RemovalPhase | null>(null);
 
   // Hydration signal so E2E/render tests can wait for the island's event
   // handlers to be attached before driving the file input.
@@ -144,6 +153,8 @@ export default function CropStudio() {
         // result belongs to the previous source and is discarded.
         runTokenRef.current += 1;
         setProgress(null);
+        setRemovalPhase(null);
+        removalPhaseRef.current = null;
         const url = URL.createObjectURL(file);
         const probe = await loadImage(url).catch(() => null);
         const check = validateFileMeta({
@@ -217,12 +228,26 @@ export default function CropStudio() {
     setError(null);
     setStage("removing");
     setProgress(0);
+    setRemovalPhase("download");
+    removalPhaseRef.current = "download";
     announce("Downloading the on-device model on first run, then cutting out the portrait.");
     const result = await removeBackgroundInBrowser(source.src, (p: RemovalProgress) => {
-      if (p.total > 0) setProgress(Math.round((p.current / p.total) * 100));
+      if (p.phase === "fetch") {
+        // Percent of the current model file: real chunk counts, no invention.
+        if (p.total > 0) setProgress(Math.round((p.current / p.total) * 100));
+      } else if (removalPhaseRef.current !== "process") {
+        // The download finished and on-device inference is running. The
+        // pipeline reports no compute counts, so the honest signal is the
+        // phase flip itself — never a fabricated percentage.
+        removalPhaseRef.current = "process";
+        setRemovalPhase("process");
+        announce("Cutting out the portrait on your device.");
+      }
     });
     if (runTokenRef.current !== runToken) return;
     setProgress(null);
+    setRemovalPhase(null);
+    removalPhaseRef.current = null;
     if (!result.ok) {
       setStage("ready");
       // A removal failure belongs to the frame stage, where removal was
@@ -283,6 +308,8 @@ export default function CropStudio() {
   const handleAbortRemoval = useCallback(() => {
     runTokenRef.current += 1;
     setProgress(null);
+    setRemovalPhase(null);
+    removalPhaseRef.current = null;
     setStage("ready");
     announce("Removal cancelled. The original photo still frames and exports.");
   }, [announce]);
@@ -360,6 +387,8 @@ export default function CropStudio() {
     setExpanded("source");
     setError(null);
     setProgress(null);
+    setRemovalPhase(null);
+    removalPhaseRef.current = null;
     setZoom(1);
     setStage("idle");
     announce("Cleared. Choose a portrait to begin. JPEG or PNG, up to 8 MB.");
@@ -458,10 +487,12 @@ export default function CropStudio() {
         stage={stage}
         canWork={canWork}
         progress={progress}
+        removalPhase={removalPhase}
         runRemoval={runRemoval}
         handleRemove={handleRemove}
         handleSkipRemoval={handleSkipRemoval}
         handleAbortRemoval={handleAbortRemoval}
+        onStartOver={resetAll}
       />
 
       <div className="bg-border-custom h-[var(--stroke-hatch)] w-full" aria-hidden="true" />

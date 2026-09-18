@@ -471,6 +471,51 @@ preset, ms }`); `POST /api/crop/remove` is a reserved `501` stub
      remover cross-link, so the three surfaces stay connected in both
      directions.
 
+### Feature 9 — Navigation, reset, and removal feedback
+
+- **Objective:** make the Studio feel like a complete workspace — the visitor
+  always knows how to leave, how to replace the photo, and what the removal
+  pipeline is doing right now — without disturbing the bench spine, the
+  consent gate, or the export contract.
+- **Expected behavior:** a page-level **Back to Lab** link sits above the
+  masthead using the Lab entry-page back-link pattern; a **Start over**
+  control is reachable from the frame stage (where the bench actually rests)
+  and resets only photo-dependent state; a removal run shows one honest
+  loading panel that distinguishes downloading from on-device inference.
+- **Detailed requirements:**
+  1. **Back to Lab** — a normal `href="/experiments"` link (no history
+     manipulation) at the top of the container, `arrows/arrow-left` doodle
+     icon, `text-primary` / `hover:text-primary-hover` with the standard
+     focus-ring classes. It never competes with the bench.
+  2. **Start over** — the existing `resetAll` path, additionally surfaced as
+     a full-width secondary control in the frame stage's controls column
+     whenever `canWork`. It clears the photo, cutout, crop box, export,
+     error, progress, and zoom; presets, backgrounds, format, face-guide,
+     and model-consent preferences persist. No confirmation dialog: the
+     action is one re-pick away and the status line announces the reset.
+  3. **Removal progress phases** — `removeBackgroundInBrowser` tags each
+     progress event with `phase: "fetch" | "compute"` instead of dropping
+     `compute:*`. The Studio maps this to one inline panel:
+     - `download` — indeterminate spinner plus the real per-file percent
+       ("…% of the current model file"); the library reports chunks per
+       asset, never a whole-model total, so no whole-model percentage is
+       shown.
+     - `process` — the same indeterminate spinner with copy stating the
+       step runs on the device and has no progress count.
+       No fabricated percentages anywhere; `motion-reduce` keeps the spinner
+       static; the page-level status line announces the phase transitions.
+  4. **Abort behavior unchanged** — cancelling still orphans the run token,
+     clears progress/phase, and returns to `ready`.
+  5. **Composition** — the page container widens to the `wide` step (1440
+     px); the frame stage caps its canvas column at 640 px (centered) so
+     the square plate stays within the viewport on 1920×1080, while the
+     controls column absorbs the extra width. The removal action, consent,
+     progress panel, and cancel group into one labelled **Background
+     removal** sub-panel. Mobile ≥320 px keeps the single-column stack; no
+     sticky bars, no fixed viewport heights, nothing clipped.
+  6. **Sibling parity** — `/remove-background` keeps its exact behavior: its
+     percent stays download-only via the phase guard.
+
 ---
 
 ## 5. UI/UX Considerations
@@ -757,6 +802,26 @@ preset, ms }`); `POST /api/crop/remove` is a reserved `501` stub
 - [ ] No link points into `docs/`; cross-links to the Lab note and the
       background remover work in both directions.
 
+### Feature 9 — Navigation, reset, and removal feedback
+
+- [ ] A visible **Back to Lab** link navigates to `/experiments` as normal
+      navigation and follows the Lab entry-page back-link pattern.
+- [ ] A **Start over** control is available while a photo is loaded (from the
+      frame stage without re-expanding stage 01) and clears photo-dependent
+      state only; presets, backgrounds, format, and model consent persist.
+- [ ] Background removal shows clear visible loading feedback from the first
+      click: download percent is real per-file data, inference shows an
+      accessible indeterminate indicator, and no fabricated percentage
+      appears in any phase.
+- [ ] Phase transitions are announced through the existing status line; the
+      panel is legible in light and dark modes and honors reduced motion.
+- [ ] Abort and retry behavior is unchanged and remains functional.
+- [ ] Wide desktop uses the `wide` container; 1920×1080 keeps a sensible
+      composition with the canvas capped at 640 px; mobile ≥320 px stays
+      usable with no horizontal overflow or clipped controls.
+- [ ] `/remove-background` behavior is unchanged (its percent remains
+      download-only).
+
 ### Global
 
 - [ ] No new dependencies.
@@ -775,6 +840,7 @@ preset, ms }`); `POST /api/crop/remove` is a reserved `501` stub
 
 ## Change Log
 
-| Date       | Change                                                                                                                                                                                                                                                                 |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-15 | Initial draft: Features 1-8 (two-mode surface, bench spine, intake, consent-first removal, export and print helper, design-system conformity, accessibility parity, record lane) plus parked items in section 8. Decisions 1-4 recorded at the 2026-09-15 plan review. |
+| Date       | Change                                                                                                                                                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-09-15 | Initial draft: Features 1-8 (two-mode surface, bench spine, intake, consent-first removal, export and print helper, design-system conformity, accessibility parity, record lane) plus parked items in section 8. Decisions 1-4 recorded at the 2026-09-15 plan review.                                 |
+| 2026-09-16 | Feature 9 added: Back to Lab navigation, frame-stage Start over reset, honest removal progress phases (`fetch`/`compute`) with an indeterminate inference indicator, `wide` container with a 640 px canvas cap, and a grouped Background removal sub-panel. Matching acceptance boxes under section 9. |

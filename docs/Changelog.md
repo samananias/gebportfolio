@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Added `/crop` Studio navigation, reset, and removal feedback (spec 0009
+  Feature 9):
+  - Page-level **Back to Lab** link above the masthead, reusing the Lab
+    entry-page back-link pattern (arrow-left doodle icon, semantic tokens).
+  - **Start over** now reachable from the frame stage (where the bench rests
+    after a load), wired to the existing `resetAll` path — photo-dependent
+    state clears, preset/background/format/model-consent preferences persist.
+  - Honest background-removal loading feedback: `removal.ts` now tags progress
+    events with `phase: "fetch" | "compute"`, and a token-bound inline panel
+    (`RemovalProgressPanel.tsx`) shows a theme-aware indeterminate spinner
+    with the real per-file download percent, then an explicit
+    no-progress-count state during on-device inference. No fake percentages;
+    phase transitions are announced via the existing status line; abort
+    behavior is unchanged.
+  - Composition: the page container moves to the `wide` step and the frame
+    stage caps its canvas column at 640 px so 1920×1080 stays composed; the
+    removal action, consent, progress, and cancel group into one labelled
+    **Background removal** sub-panel.
+  - `/remove-background` behavior is unchanged (its percent stays
+    download-only via the phase guard).
+  - New E2E coverage for the Back to Lab link and the frame-stage reset.
+
 - Refactored `src/components/islands/CropStudio.tsx` file structure for maintainability:
   - Reduced the main orchestrator file from 1,297 lines to 411 lines (~68% reduction) while preserving 100% of existing behavior, state transitions, DOM IDs, ARIA semantics, and test contracts.
   - Created `src/components/crop/` to house dedicated, single-responsibility submodules:

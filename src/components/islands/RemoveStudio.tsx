@@ -88,6 +88,9 @@ export default function RemoveStudio() {
   );
 
   const onProgress = useCallback((p: RemovalProgress) => {
+    // Download chunks only: compute events carry no chunk counts, so a
+    // percent would be invented (spec 0009 Feature 9).
+    if (p.phase !== "fetch") return;
     if (p.total > 0) setProgress(Math.round((p.current / p.total) * 100));
   }, []);
 

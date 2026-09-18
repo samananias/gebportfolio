@@ -20,6 +20,13 @@ export interface RemovalProgress {
   current: number;
   /** Total chunks or steps when known, otherwise zero. */
   total: number;
+  /**
+   * Which half of the pipeline is running: `fetch` (model files over the
+   * network, chunked and percentable) or `compute` (on-device inference,
+   * which reports no chunk counts). Surfacing the phase lets the UI stay
+   * honest instead of freezing a download percentage during inference.
+   */
+  phase: "fetch" | "compute";
 }
 
 export type RemovalResult =
@@ -79,7 +86,8 @@ export async function fitWithinCap(img: HTMLImageElement, cap: number): Promise<
  * Photos never leave the device (see ADR 0008).
  *
  * @param src - `src` URL of the source image element
- * @param onProgress - Optional progress callback surfaced as `fetch:*`
+ * @param onProgress - Optional progress callback surfaced as `fetch:*` and
+ *   `compute:*` events (each tagged with its phase)
  * @returns Cutout blob plus elapsed milliseconds, or an error message
  */
 export async function removeBackgroundInBrowser(
@@ -92,8 +100,14 @@ export async function removeBackgroundInBrowser(
     const { removeBackground } = await import("@imgly/background-removal");
     const blob = await removeBackground(src, {
       progress: (key: string, current: number, total: number) => {
-        if (!onProgress || !key.startsWith("fetch:")) return;
-        onProgress({ key, current, total });
+        if (!onProgress) return;
+        // Forward both halves of the pipeline: fetch events carry chunk
+        // counts, compute events carry the fact that inference is running.
+        if (key.startsWith("fetch:")) {
+          onProgress({ key, current, total, phase: "fetch" });
+        } else if (key.startsWith("compute:")) {
+          onProgress({ key, current, total, phase: "compute" });
+        }
       },
     });
     return { ok: true, blob, ms: done() };

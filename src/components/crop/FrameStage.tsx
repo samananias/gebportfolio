@@ -9,8 +9,16 @@ import {
   type IdPresetId,
 } from "../../lib/crop/presets";
 import { BG_LABEL, NUDGE_STEP_PX } from "./constants";
+import { RemovalProgressPanel } from "./RemovalProgressPanel";
 import { StageHeader } from "./StageHeader";
-import type { BenchStageId, CropBox, CropError, Stage, StageStateResult } from "./types";
+import type {
+  BenchStageId,
+  CropBox,
+  CropError,
+  RemovalPhase,
+  Stage,
+  StageStateResult,
+} from "./types";
 
 interface FrameStageProps {
   expanded: boolean;
@@ -40,10 +48,12 @@ interface FrameStageProps {
   stage: Stage;
   canWork: boolean;
   progress: number | null;
+  removalPhase: RemovalPhase | null;
   runRemoval: () => Promise<void>;
   handleRemove: () => void;
   handleSkipRemoval: () => void;
   handleAbortRemoval: () => void;
+  onStartOver: () => void;
 }
 
 export function FrameStage({
@@ -72,10 +82,12 @@ export function FrameStage({
   stage,
   canWork,
   progress,
+  removalPhase,
   runRemoval,
   handleRemove,
   handleSkipRemoval,
   handleAbortRemoval,
+  onStartOver,
 }: FrameStageProps) {
   return (
     <section
@@ -122,7 +134,10 @@ export function FrameStage({
         )}
 
         <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-5">
-          <div className="lg:col-span-3">
+          {/* Capped and centered so the square plate never exceeds the
+              viewport height on wide screens; the controls column absorbs
+              the extra width of a wide container (spec 0009 Feature 9). */}
+          <div className="mx-auto w-full max-w-[640px] lg:col-span-3">
             <canvas
               ref={canvasRef}
               className="transparency-checkerboard border-border-custom focus-visible:ring-focus focus-visible:ring-offset-bg w-full cursor-move touch-none rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
@@ -296,64 +311,70 @@ export function FrameStage({
                 ))}
               </div>
             </fieldset>
-            <div className="space-y-2">
-              {stage === "consent" && (
-                <div
-                  role="group"
-                  aria-label="Model download consent"
-                  className="border-structural border-text bg-surface-subtle rounded-md border p-4"
-                >
-                  <p className="text-small text-text leading-relaxed">
-                    Before any cut-out happens, this tool downloads its on-device model once:{" "}
-                    {REMOVAL_MODEL.name} ({REMOVAL_MODEL.license}), about{" "}
-                    {REMOVAL_MODEL.approximateDownloadMb} MB over the network. It runs entirely in
-                    this browser ({REMOVAL_MODEL.runtime}) and is cached for next time. Your photo
-                    never leaves the device — the server only ever receives anonymous counts.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => void runRemoval()}
-                      className="bg-primary text-bg border-structural border-text inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-semibold transition-[transform,box-shadow,background-color] duration-200 hover:shadow-[2px_2px_0_var(--color-text)]"
-                    >
-                      <DoodleIcon name="interface/download" className="size-4" />
-                      Download model and cut out
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSkipRemoval}
-                      className="bg-surface text-text border-structural border-border-custom inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-medium transition-[transform,box-shadow] duration-200 hover:shadow-[2px_2px_0_var(--color-text)]"
-                    >
-                      Skip removal
-                    </button>
+            <div className="border-structural border-border-custom rounded-md border p-4">
+              <p className="text-caption text-text-muted font-mono font-bold tracking-wider uppercase">
+                Background removal
+              </p>
+              <div className="mt-3 space-y-2">
+                {stage === "consent" && (
+                  <div
+                    role="group"
+                    aria-label="Model download consent"
+                    className="border-structural border-text bg-surface-subtle rounded-md border p-4"
+                  >
+                    <p className="text-small text-text leading-relaxed">
+                      Before any cut-out happens, this tool downloads its on-device model once:{" "}
+                      {REMOVAL_MODEL.name} ({REMOVAL_MODEL.license}), about{" "}
+                      {REMOVAL_MODEL.approximateDownloadMb} MB over the network. It runs entirely in
+                      this browser ({REMOVAL_MODEL.runtime}) and is cached for next time. Your photo
+                      never leaves the device — the server only ever receives anonymous counts.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void runRemoval()}
+                        className="bg-primary text-bg border-structural border-text inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-semibold transition-[transform,box-shadow,background-color] duration-200 hover:shadow-[2px_2px_0_var(--color-text)]"
+                      >
+                        <DoodleIcon name="interface/download" className="size-4" />
+                        Download model and cut out
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSkipRemoval}
+                        className="bg-surface text-text border-structural border-border-custom inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-medium transition-[transform,box-shadow] duration-200 hover:shadow-[2px_2px_0_var(--color-text)]"
+                      >
+                        Skip removal
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-              {stage !== "consent" && (
-                <button
-                  type="button"
-                  onClick={handleRemove}
-                  disabled={!canWork || stage === "removing"}
-                  className="bg-primary text-bg border-structural border-text inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md px-5 font-sans font-semibold transition-[transform,box-shadow,background-color] duration-200 hover:shadow-[2px_2px_0_var(--color-text)] disabled:pointer-events-none disabled:opacity-50"
-                >
-                  <DoodleIcon name="files/file-image" className="size-4" />
-                  {stage === "removing"
-                    ? "Removing background…"
-                    : stage === "removed"
-                      ? "Remove again"
-                      : "Remove background"}
-                </button>
-              )}
-              {!canWork && (
-                <p className="text-caption text-text-muted leading-relaxed">
-                  Loads with a portrait in stage 2 — waiting for a photo.
-                </p>
-              )}
-              {stage === "removing" && (
-                <>
-                  {progress !== null && (
-                    <p className="text-caption text-text-muted font-mono">Model {progress}%</p>
-                  )}
+                )}
+                {stage !== "consent" && (
+                  <button
+                    type="button"
+                    onClick={handleRemove}
+                    disabled={!canWork || stage === "removing"}
+                    className="bg-primary text-bg border-structural border-text inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md px-5 font-sans font-semibold transition-[transform,box-shadow,background-color] duration-200 hover:shadow-[2px_2px_0_var(--color-text)] disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    <DoodleIcon name="files/file-image" className="size-4" />
+                    {stage === "removing"
+                      ? "Removing background…"
+                      : stage === "removed"
+                        ? "Remove again"
+                        : "Remove background"}
+                  </button>
+                )}
+                {!canWork && (
+                  <p className="text-caption text-text-muted leading-relaxed">
+                    Loads with a portrait in stage 2 — waiting for a photo.
+                  </p>
+                )}
+                {/* One honest loading panel: real per-file percent while the
+                    model streams, an indeterminate indicator while inference
+                    runs (spec 0009 Feature 9). */}
+                {stage === "removing" && (
+                  <RemovalProgressPanel phase={removalPhase} progress={progress} />
+                )}
+                {stage === "removing" && (
                   <button
                     type="button"
                     onClick={handleAbortRemoval}
@@ -361,9 +382,19 @@ export function FrameStage({
                   >
                     Cancel removal
                   </button>
-                </>
-              )}
+                )}
+              </div>
             </div>
+            {canWork && (
+              <button
+                type="button"
+                onClick={onStartOver}
+                className="bg-surface text-text border-structural border-border-custom inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md px-5 font-sans font-medium transition-[transform,box-shadow] duration-200 hover:shadow-[2px_2px_0_var(--color-text)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+              >
+                <DoodleIcon name="interface/sync" className="size-4" />
+                Start over
+              </button>
+            )}
           </div>
         </div>
       </div>

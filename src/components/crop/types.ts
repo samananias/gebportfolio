@@ -22,6 +22,9 @@ export interface CropError {
   message: string;
 }
 
+/** Which half of the removal pipeline is running (mirrors `RemovalProgress.phase`). */
+export type RemovalPhase = "download" | "process";
+
 export interface StageStateResult {
   state: CropStageState;
   label: string;
