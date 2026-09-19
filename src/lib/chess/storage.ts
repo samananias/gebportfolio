@@ -100,6 +100,9 @@ export const memoryStorageProvider: StorageProvider = {
   },
 };
 
+// @ts-expect-error cloudflare:workers virtual module resolved during Cloudflare Workers runtime
+import { env as cfEnv } from "cloudflare:workers";
+
 export interface D1PreparedStatement {
   first<T = Record<string, unknown>>(): Promise<T | null>;
   bind(...values: unknown[]): D1PreparedStatement;
@@ -121,6 +124,16 @@ export interface D1DatabaseBinding {
  */
 export async function getD1Database(locals?: App.Locals): Promise<D1DatabaseBinding | undefined> {
   try {
+    let targetEnv: Record<string, unknown> | undefined = undefined;
+    try {
+      if (typeof cfEnv !== "undefined") {
+        targetEnv = cfEnv as Record<string, unknown>;
+      }
+    } catch {
+      // cloudflare:workers env unavailable in local dev
+    }
+
+    const rawLocals = locals as Record<string, unknown>;
     const globalObj = globalThis as unknown as Record<string, unknown>;
     const cfEnv = await getWorkersEnv();
     const db = (locals?.DB || globalObj?.DB || cfEnv?.DB) as D1DatabaseBinding | undefined;

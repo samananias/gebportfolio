@@ -1,4 +1,6 @@
 import type { APIRoute } from "astro";
+// @ts-expect-error cloudflare:workers virtual module resolved during Cloudflare Workers runtime
+import { env as cfEnv } from "cloudflare:workers";
 import { validatePresetId } from "../../../lib/crop/validation";
 import { getWorkersEnv } from "../../../lib/bindings";
 
@@ -80,7 +82,7 @@ async function isRateLimited(kv: MinimalKV | null, ip: string): Promise<boolean>
  * visitor's device (see ADR 0008); this route only counts honest portfolio
  * metrics ("used N times") with best-effort KV archival.
  */
-export const POST: APIRoute = async ({ request, locals }) => {
+export const POST: APIRoute = async ({ request }) => {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 

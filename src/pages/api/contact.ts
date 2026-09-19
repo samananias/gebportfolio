@@ -162,7 +162,7 @@ async function isRateLimited(kv: MinimalKV | null, ip: string): Promise<boolean>
   return false;
 }
 
-export const POST: APIRoute = async ({ request, locals }) => {
+export const POST: APIRoute = async ({ request }) => {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 

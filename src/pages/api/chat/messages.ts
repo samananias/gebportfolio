@@ -47,6 +47,16 @@ export interface MinimalKV {
  */
 export async function getKVNamespace(locals?: App.Locals): Promise<MinimalKV | null> {
   try {
+    let targetEnv: Record<string, unknown> | undefined = undefined;
+    try {
+      if (typeof cfEnv !== "undefined") {
+        targetEnv = cfEnv as Record<string, unknown>;
+      }
+    } catch {
+      // cloudflare:workers env unavailable in local dev
+    }
+
+    const rawLocals = locals as unknown as Record<string, unknown>;
     const globalObj = globalThis as unknown as Record<string, unknown>;
     const cfEnv = await getWorkersEnv();
     const kv = (locals?.CHAT_KV || globalObj?.CHAT_KV || cfEnv?.CHAT_KV) as MinimalKV | undefined;
