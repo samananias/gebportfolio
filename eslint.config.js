@@ -9,6 +9,11 @@ export default tseslint.config(
       "dist/**",
       "node_modules/**",
       ".qoder/**",
+      // `.kilo/` is the Kilo tool's gitignored scratch space. A nested git
+      // worktree inside it carries its own tsconfig.json, which otherwise
+      // makes the typescript-eslint parser fail repo-wide with "multiple
+      // candidate TSConfigRootDirs".
+      ".kilo/**",
       ".agents/**",
       ".github/skills/**",
       "party/**",

@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Redesigned `/remove-background` to parity with the `/crop` Studio surface
+  (spec 0010), keeping the tool strictly removal-only:
+  - New `src/components/remove/` module mirroring `src/components/crop/`:
+    `types.ts` (removal-only bench spine plus a `RemovePipelineStage` whose
+    `consent` state gates the first model download), `constants.ts` (plate
+    ordinals, heading/panel ids, distinct `remove-mode` storage key),
+    `StageHeader.tsx`, `SourceStage.tsx`, `RemoveStage.tsx`, and
+    `DownloadStage.tsx`. The stamp treatment (`getCropStampClass`),
+    `RemovalProgressPanel`, and the `crop-model-consent` flag are reused from
+    the crop modules rather than duplicated.
+  - Page shell rebuild: `wide` container, **Back to Lab** link, Lab badge
+    masthead, chessboard divider, and the conforming Studio / How it works
+    tablist (roving tabindex, `?mode` deep link, `localStorage` persistence,
+    `noscript` stacking fallback).
+  - Evidence lane with four static articles — the guards table, the
+    transparency contract, the privacy model, and where the evidence lives —
+    every figure imported from `EXPORT` and `REMOVAL_MODEL`; no invented
+    numbers.
+  - Consent-first removal: the ~40 MB first-run model download is disclosed
+    and confirmed before it starts, can be declined without losing the loaded
+    photo, and can be cancelled while it runs. Phase honesty is unchanged from
+    the crop rework — the real per-file download percent, then an explicit
+    indeterminate state during on-device inference.
+  - One intake funnel behind the file input, drag-and-drop, clipboard paste,
+    and camera capture, with synchronous-first validation, run-token
+    orphaning of stale removals, and same-file-twice support.
+  - One-action PNG download that preserves the alpha channel, plus a
+    re-download affordance that stays reachable while its plate is collapsed
+    (exactly one `a[download]` in the DOM at a time).
+  - Telemetry and API surface unchanged: one `removal_succeeded` event,
+    metadata only; no new endpoints; no new dependencies.
+  - `tests/e2e/remove-background.spec.ts` rewritten to the new DOM contract
+    (three stamped plates, consent confirm and decline paths, non-fatal
+    removal failure, inline upload rejection) and extended with a guard
+    asserting that no crop controls exist on the route.
+  - In-place reset without a reload (spec 0010 Feature 7): **Start over** on
+    the remove plate (where the bench rests after a load) and **Another
+    photo** on the download plate both run the shared `resetAll` path —
+    photo, cutout, progress, error, and prepared download clear, the file
+    input re-arms, and the bench returns to stage 01, while the model-consent
+    flag and mode choice persist. E2E covers both reset paths.
+  - Documented in spec `0010` and roadmap `0010.1`, with a surface brief at
+    `.impeccable/surfaces/src-pages-remove-background-astro.md` that records
+    this route superseding the `/crop` brief's "no reshape" anti-goal.
+
 - Added `/crop` Studio navigation, reset, and removal feedback (spec 0009
   Feature 9):
   - Page-level **Back to Lab** link above the masthead, reusing the Lab

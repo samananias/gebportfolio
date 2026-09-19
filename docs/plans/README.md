@@ -58,3 +58,5 @@ For quick iteration, copy the standard template from [0000-template.md](0000-tem
 | `0008`   | [Lab Ledger & Entry Records Specification](0008-lab-ledger-specification.md)                                                     | `In Progress` | 2026-09-15 |
 | `0009`   | [Crop Page Redesign — Two-Mode ID Photo Studio](0009-crop-page-redesign-specification.md)                                        | `In Progress` | 2026-09-15 |
 | `0009.1` | [Crop Page Redesign Roadmap & Checkpoints](0009.1-crop-page-redesign-roadmap.md)                                                 | `In Progress` | 2026-09-15 |
+| `0010`   | [Remove Background Page Redesign — Crop Studio Parity](0010-remove-background-redesign-specification.md)                         | `Implemented` | 2026-09-18 |
+| `0010.1` | [Remove Background Redesign Roadmap & Checkpoints](0010.1-remove-background-redesign-roadmap.md)                                 | `Implemented` | 2026-09-18 |

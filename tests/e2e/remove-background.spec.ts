@@ -90,24 +90,53 @@ test.describe("Remove Background page", () => {
     await expect(page.locator("#remove-studio")).toHaveAttribute("data-remove-hydrated", "true");
   });
 
-  test("shows the removal-only workbench with no crop controls", async ({ page }) => {
+  test("shows the removal-only bench with no crop controls", async ({ page }) => {
+    // The three stamped plates: source expanded, remove and download rest
+    // as collapsed rows whose headings and summary stay visible.
     await expect(page.getByRole("heading", { name: "01 · Source photo" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "02 · Compare" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "03 · Remove & export" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "02 · Remove the background" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "03 · Download the cutout" })).toBeVisible();
     await expect(page.getByText("No photo yet. Choose a photo first.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Remove background" })).toBeDisabled();
-    // Feature 3: absolutely no crop UI on this page.
+    await expect(page.getByRole("button", { name: "Download PNG" })).toBeDisabled();
+    // Feature 3 of spec 0007, preserved by spec 0010: absolutely no crop UI.
     await expect(page.locator("#crop-studio")).toHaveCount(0);
     await expect(page.locator("#crop-studio canvas")).toHaveCount(0);
     await expect(page.locator("#crop-guide")).toHaveCount(0);
     await expect(page.getByRole("radiogroup")).toHaveCount(0);
   });
 
-  test("removal failure is non-fatal and keeps the original usable", async ({ page }) => {
+  test("consent-first removal failure is non-fatal and keeps the original usable", async ({
+    page,
+  }) => {
     // The mocked model provider returns synthetic bytes (not a real
-    // resources.json manifest), so the removal library fails exactly as
-    // it would on a model/network stall. The page must degrade
-    // gracefully: clear error, original still visible, no crash.
+    // resources.json manifest), so the removal library fails exactly as it
+    // would on a model/network stall. The page must degrade gracefully:
+    // consent first, clear error, original still visible, no crash.
+    const pngBuffer = buildPng(32, 32, [200, 30, 30, 255]);
+    await page.locator("#remove-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Photo loaded.")).toBeVisible();
+
+    // First run on a cold cache: the ~40 MB download is disclosed and
+    // confirmed before anything streams (spec 0010 Feature 4).
+    await page.getByRole("button", { name: "Remove background" }).click();
+    const consent = page.getByRole("group", { name: "Model download consent" });
+    await expect(consent).toContainText("Download model and cut out");
+    await consent.getByRole("button", { name: "Download model and cut out" }).click();
+
+    await expect(page.getByRole("alert")).toContainText("Background removal failed");
+    await expect(page.getByRole("button", { name: "Remove background" })).toBeEnabled();
+    // The original is still displayed and usable; the download stays
+    // locked until a real cutout exists.
+    await expect(page.locator("#remove-studio img").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download PNG" })).toBeDisabled();
+  });
+
+  test("consent can be declined without losing the loaded photo", async ({ page }) => {
     const pngBuffer = buildPng(32, 32, [200, 30, 30, 255]);
     await page.locator("#remove-file").setInputFiles({
       name: "portrait.png",
@@ -117,12 +146,13 @@ test.describe("Remove Background page", () => {
     await expect(page.getByText("Photo loaded.")).toBeVisible();
 
     await page.getByRole("button", { name: "Remove background" }).click();
-    await expect(page.getByRole("alert")).toContainText("Background removal failed");
-    await expect(page.getByRole("button", { name: "Remove background" })).toBeEnabled();
-    // The original is still displayed and usable; exports stay disabled
-    // until a real cutout exists.
-    await expect(page.locator("#remove-studio img").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Prepare download" })).toBeDisabled();
+    const consent = page.getByRole("group", { name: "Model download consent" });
+    await expect(consent).toBeVisible();
+    await consent.getByRole("button", { name: "Not now" }).click();
+
+    // Back to ready: the removal button returns and no model fetch started.
+    await expect(page.getByRole("button", { name: "Remove background" })).toBeVisible();
+    await expect(consent).toHaveCount(0);
   });
 
   test("rejects non-image uploads with inline error", async ({ page }) => {
@@ -132,5 +162,55 @@ test.describe("Remove Background page", () => {
       buffer: Buffer.from("not a photo"),
     });
     await expect(page.getByRole("alert")).toContainText("Only JPEG and PNG");
+  });
+
+  test("offers Start over from the resting plate so a second photo needs no reload", async ({
+    page,
+  }) => {
+    const pngBuffer = buildPng(32, 32, [200, 30, 30, 255]);
+    await page.locator("#remove-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Photo loaded.")).toBeVisible();
+
+    // After a load the bench rests on stage 02, so Start over must be
+    // reachable there without re-expanding stage 01 (spec 0010 Feature 7).
+    await page.getByRole("button", { name: "Start over" }).click();
+
+    // Reset returns to intake: status line, empty state, and the downstream
+    // plates lock again — all without a page reload.
+    await expect(page.getByText("Cleared. Choose a photo to remove its background.")).toBeVisible();
+    await expect(page.getByText("No photo yet. Choose a photo first.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove background" })).toBeDisabled();
+
+    // The re-armed input accepts the same file immediately, which is the
+    // whole point of starting over in place.
+    await page.locator("#remove-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Photo loaded.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove background" })).toBeEnabled();
+  });
+
+  test("offers Another photo from the download plate", async ({ page }) => {
+    const pngBuffer = buildPng(32, 32, [200, 30, 30, 255]);
+    await page.locator("#remove-file").setInputFiles({
+      name: "portrait.png",
+      mimeType: "image/png",
+      buffer: pngBuffer,
+    });
+    await expect(page.getByText("Photo loaded.")).toBeVisible();
+
+    // The download plate's header is its toggle; expanding it moves the
+    // bench off stage 02, so it owns the only reset affordance on screen.
+    await page.getByRole("button", { name: "03 · Download the cutout" }).click();
+    await page.getByRole("button", { name: "Another photo" }).click();
+
+    await expect(page.getByText("Cleared. Choose a photo to remove its background.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Download PNG" })).toBeDisabled();
   });
 });

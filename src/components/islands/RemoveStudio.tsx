@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { DoodleIcon } from "../ui/DoodleIcon";
 import { EXPORT, REMOVAL_MODEL } from "../../lib/crop/presets";
 import { validateFileMeta } from "../../lib/crop/validation";
 import {
@@ -9,55 +8,98 @@ import {
   type RemovalProgress,
   type RemovalResult,
 } from "../../lib/crop/removal";
-
-type Stage = "idle" | "ready" | "removing" | "removed";
+import type { RemovalPhase } from "../crop/types";
+// The consent flag is shared on purpose: both tools download the same
+// on-device model, so one cached flag is the truthful state (spec 0010 §6).
+import { readModelConsent, writeModelConsent } from "../crop/constants";
+import { STAGE_LABEL } from "../remove/constants";
+import { SourceStage } from "../remove/SourceStage";
+import { RemoveStage } from "../remove/RemoveStage";
+import { DownloadStage, type DownloadInfo } from "../remove/DownloadStage";
+import type {
+  RemoveError,
+  RemovePipelineStage,
+  RemoveStageId,
+  StageStateResult,
+} from "../remove/types";
 
 /**
- * Removal-only React island for `/remove-background`.
- *
- * Intentionally free of crop concepts: no frame, face guide, preset
- * radios, zoom, or size controls (Feature 3 of
- * docs/plans/0007-image-editing-improvements.md). Upload, remove on a
- * transparent input, compare original versus result, download the PNG.
+ * Removal-only React island for `/remove-background`, composed as the same
+ * progressive bench as `/crop` (spec 0010): one plate open at a time, state
+ * stamps, one intake funnel, consent-first removal with abort, and an
+ * honest one-action download. Intentionally free of crop concepts — no
+ * frame, face guide, preset radios, zoom, or canvas (Feature 3 of
+ * docs/plans/0007-image-editing-improvements.md, preserved by spec 0010).
  */
 export default function RemoveStudio() {
-  const [stage, setStage] = useState<Stage>("idle");
+  const [stage, setStage] = useState<RemovePipelineStage>("idle");
   const [status, setStatus] = useState(
     "Choose a photo to remove its background. JPEG or PNG, up to 8 MB."
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<RemoveError | null>(null);
+  const [expanded, setExpanded] = useState<RemoveStageId>("source");
   const [progress, setProgress] = useState<number | null>(null);
+  const [removalPhase, setRemovalPhase] = useState<RemovalPhase | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadInfo, setDownloadInfo] = useState<DownloadInfo | null>(null);
+  const [isReading, setIsReading] = useState(false);
+  const [isModelCached, setIsModelCached] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const originalRef = useRef<HTMLImageElement | null>(null);
   const cutoutRef = useRef<HTMLImageElement | null>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
+  const isReadingRef = useRef(false);
+  const runTokenRef = useRef(0);
+  const removalPhaseRef = useRef<RemovalPhase | null>(null);
 
+  // Hydration signal so E2E/render tests can wait for the island's event
+  // handlers to be attached before driving the file input.
   useEffect(() => {
     rootRef.current?.setAttribute("data-remove-hydrated", "true");
+    // Read the persisted consent flag after mount so SSR and the first
+    // client render agree and hydration never mismatches.
+    setIsModelCached(readModelConsent());
   }, []);
 
   const announce = useCallback((message: string) => setStatus(message), []);
+
   const handleFile = useCallback(
     async (file: File | undefined) => {
-      if (!file) return;
-      const earlyCheck = validateFileMeta({
-        mimeType: file.type,
-        sizeBytes: file.size,
-        widthPx: 1,
-        heightPx: 1,
-      });
-      if (!earlyCheck.isValid && earlyCheck.error !== "The photo dimensions could not be read.") {
-        setError(earlyCheck.error);
-        announce(earlyCheck.error ?? "That photo could not be used.");
-        return;
-      }
-      setError(null);
-      setDownloadUrl(null);
-      const url = URL.createObjectURL(file);
+      // One funnel for file input, drag-and-drop, paste, and camera capture
+      // (spec 0010 Feature 3). A busy flag keeps re-entrant intakes honest.
+      if (!file || isReadingRef.current) return;
+      isReadingRef.current = true;
+      setIsReading(true);
+      announce("Reading photo…");
       try {
+        // Validate synchronously first so the feedback is instant and never
+        // depends on image decoding (a .txt file never decodes to an image).
+        const earlyCheck = validateFileMeta({
+          mimeType: file.type,
+          sizeBytes: file.size,
+          widthPx: 1,
+          heightPx: 1,
+        });
+        if (!earlyCheck.isValid && earlyCheck.error !== "The photo dimensions could not be read.") {
+          const message = earlyCheck.error ?? "That photo could not be used.";
+          // The alert belongs to the stage that produced it: intake errors
+          // surface inside the source stage, expanded so they are seen.
+          setError({ stage: "source", message });
+          setExpanded("source");
+          announce(message);
+          return;
+        }
+        // A freshly chosen photo orphans any in-flight removal run: its
+        // result belongs to the previous source and is discarded.
+        runTokenRef.current += 1;
+        setDownloadUrl(null);
+        setDownloadInfo(null);
+        setProgress(null);
+        setRemovalPhase(null);
+        removalPhaseRef.current = null;
+        const url = URL.createObjectURL(file);
         const probe = await loadImage(url).catch(() => null);
         const check = validateFileMeta({
           mimeType: file.type,
@@ -66,54 +108,137 @@ export default function RemoveStudio() {
           heightPx: probe?.naturalHeight ?? 0,
         });
         if (!check.isValid) {
-          setError(check.error);
-          announce(check.error ?? "That photo could not be used.");
+          const message = check.error ?? "That photo could not be used.";
+          setError({ stage: "source", message });
+          setExpanded("source");
+          announce(message);
           return;
         }
         if (!probe) {
           const message = "The photo could not be read. Try another file.";
-          setError(message);
+          setError({ stage: "source", message });
+          setExpanded("source");
           announce(message);
           return;
         }
-        originalRef.current = await fitWithinCap(probe, EXPORT.maxInputDimensionPx);
+        setError(null);
+        const fitted = await fitWithinCap(probe, EXPORT.maxInputDimensionPx);
+        originalRef.current = fitted;
         cutoutRef.current = null;
         setStage("ready");
+        // Loaded means removal: the bench rests on the remove plate so the
+        // compare and controls are the next thing the visitor sees.
+        setExpanded("remove");
         announce("Photo loaded. Run background removal to cut out the subject.");
       } catch {
-        setError("The photo could not be read. Try another file.");
+        const message = "The photo could not be read. Try another file.";
+        setError({ stage: "source", message });
+        setExpanded("source");
+        announce(message);
+      } finally {
+        isReadingRef.current = false;
+        setIsReading(false);
       }
     },
     [announce]
   );
 
-  const onProgress = useCallback((p: RemovalProgress) => {
-    // Download chunks only: compute events carry no chunk counts, so a
-    // percent would be invented (spec 0009 Feature 9).
-    if (p.phase !== "fetch") return;
-    if (p.total > 0) setProgress(Math.round((p.current / p.total) * 100));
-  }, []);
+  // Clipboard paste intake: an image copied anywhere lands in the same
+  // funnel while the source stage is the expanded one.
+  useEffect(() => {
+    if (expanded !== "source") return;
+    const onPaste = (event: ClipboardEvent) => {
+      const file = Array.from(event.clipboardData?.files ?? []).find((item) =>
+        item.type.startsWith("image/")
+      );
+      if (!file) return;
+      event.preventDefault();
+      void handleFile(file);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [expanded, handleFile]);
 
-  const handleRemove = useCallback(async () => {
+  const runRemoval = useCallback(async () => {
     const source = originalRef.current;
     if (!source) return;
+    // Run token: bumping it orphans any in-flight run so its late result is
+    // discarded instead of clobbering a newer pipeline state. The model
+    // library exposes no abort signal, so cancelling means "ignore whatever
+    // this run produces".
+    const runToken = ++runTokenRef.current;
     setError(null);
     setStage("removing");
     setProgress(0);
+    setRemovalPhase("download");
+    removalPhaseRef.current = "download";
     announce("Downloading the on-device model on first run, then cutting out the subject.");
-    const result = await removeBackgroundInBrowser(source.src, onProgress);
+    const result = await removeBackgroundInBrowser(source.src, (p: RemovalProgress) => {
+      if (p.phase === "fetch") {
+        // Percent of the current model file: real chunk counts, no invention.
+        if (p.total > 0) setProgress(Math.round((p.current / p.total) * 100));
+      } else if (removalPhaseRef.current !== "process") {
+        // The download finished and on-device inference is running. The
+        // pipeline reports no compute counts, so the honest signal is the
+        // phase flip itself — never a fabricated percentage.
+        removalPhaseRef.current = "process";
+        setRemovalPhase("process");
+        announce("Cutting out the subject on your device.");
+      }
+    });
+    if (runTokenRef.current !== runToken) return;
     setProgress(null);
+    setRemovalPhase(null);
+    removalPhaseRef.current = null;
     if (!result.ok) {
       setStage("ready");
-      setError(result.error);
+      // A removal failure belongs to the remove stage, where removal was
+      // requested.
+      setError({ stage: "remove", message: result.error });
       announce(result.error);
       return;
     }
     cutoutRef.current = await loadImage(URL.createObjectURL(result.blob));
+    if (runTokenRef.current !== runToken) return;
+    // Persist the consent flag only after a real success: the model is now
+    // browser-cached, so the next session can skip the disclosure. A failed
+    // download is disclosed and confirmed again next time.
+    writeModelConsent();
+    setIsModelCached(true);
     setStage("removed");
     announce("Background removed on your device. The result keeps transparency.");
     await telemetryRemoval(result);
-  }, [announce, onProgress]);
+  }, [announce]);
+
+  const handleRemove = useCallback(() => {
+    if (!originalRef.current) return;
+    setError(null);
+    if (isModelCached) {
+      // The model is already cached on this device: no download, no gate.
+      void runRemoval();
+      return;
+    }
+    // First run: the ~40 MB fetch is disclosed and confirmed before it starts.
+    setStage("consent");
+    announce(
+      `First run downloads the on-device model, about ${REMOVAL_MODEL.approximateDownloadMb} MB. Confirm below to continue.`
+    );
+  }, [announce, isModelCached, runRemoval]);
+
+  const handleDeclineConsent = useCallback(() => {
+    setStage("ready");
+    announce("Not now. The photo stays loaded — removal can start any time.");
+  }, [announce]);
+
+  const handleAbortRemoval = useCallback(() => {
+    runTokenRef.current += 1;
+    setProgress(null);
+    setRemovalPhase(null);
+    removalPhaseRef.current = null;
+    setStage("ready");
+    announce("Removal cancelled. The original photo stays loaded.");
+  }, [announce]);
+
   const handleDownload = useCallback(() => {
     const cutout = cutoutRef.current;
     if (!cutout) return;
@@ -122,189 +247,165 @@ export default function RemoveStudio() {
     canvas.height = cutout.naturalHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // The cutout keeps its alpha channel; the canvas converts it to a
-    // PNG blob directly so nothing flattens it.
+    // The cutout keeps its alpha channel; the canvas converts it to a PNG
+    // blob directly so nothing flattens it.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(cutout, 0, 0, canvas.width, canvas.height);
-    setDownloadUrl(canvas.toDataURL("image/png"));
-    announce(`Result ready at ${canvas.width} by ${canvas.height} pixels.`);
+    const url = canvas.toDataURL("image/png");
+    setDownloadUrl(url);
+    setDownloadInfo({ width: canvas.width, height: canvas.height });
+    // One action: the download itself hands the file to the browser (spec
+    // 0010 Feature 5). The visible affordance stays for a re-download.
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cutout-${canvas.width}x${canvas.height}.png`;
+    link.click();
+    link.remove();
+    announce(
+      `Result ready at ${canvas.width} by ${canvas.height} pixels. The file is downloading.`
+    );
     statusRef.current?.focus();
   }, [announce]);
 
+  // A stale download must never masquerade as fresh: any pipeline move away
+  // from "removed" (new photo, new run, reset) invalidates the prepared file.
+  useEffect(() => {
+    if (stage === "removed") return;
+    setDownloadUrl(null);
+    setDownloadInfo(null);
+  }, [stage]);
+
   const resetAll = useCallback(() => {
+    runTokenRef.current += 1; // orphan any in-flight removal run
     originalRef.current = null;
     cutoutRef.current = null;
     setDownloadUrl(null);
+    setDownloadInfo(null);
     setError(null);
     setProgress(null);
+    setRemovalPhase(null);
+    removalPhaseRef.current = null;
+    setExpanded("source");
     setStage("idle");
     announce("Cleared. Choose a photo to remove its background.");
     if (fileRef.current) fileRef.current.value = "";
   }, [announce]);
+
+  const canWork =
+    stage === "ready" || stage === "consent" || stage === "removing" || stage === "removed";
+  const removalDone = stage === "removed";
+  const downloaded = downloadUrl !== null;
+
+  const toggleStage = (id: RemoveStageId) => {
+    if (id === expanded) return;
+    // The bench is an exclusive accordion: exactly one plate is always open,
+    // so the collapsed summary line can never overlap the panel.
+    setExpanded(id);
+    announce(`${STAGE_LABEL[id]} stage expanded.`);
+  };
+
+  /** Stamp for each bench plate, derived from the pipeline state. */
+  const stageState = (id: RemoveStageId): StageStateResult => {
+    if (id === "source") {
+      if (!canWork) return { state: "waiting", label: "choose" };
+      return { state: "done", label: "loaded" };
+    }
+    if (id === "remove") {
+      if (!canWork) return { state: "locked", label: "waiting for a photo" };
+      if (stage === "removing") return { state: "current", label: "removing" };
+      if (removalDone) return { state: "done", label: "cut out" };
+      return { state: "current", label: "remove" };
+    }
+    if (!canWork) return { state: "locked", label: "waiting for a photo" };
+    if (downloaded) return { state: "done", label: "saved" };
+    if (removalDone) return { state: "current", label: "download" };
+    return { state: "locked", label: "waiting for a cutout" };
+  };
+
+  const removeSummary = !canWork
+    ? "No photo yet. Choose a photo first."
+    : removalDone
+      ? "Background removed — stage 3 hands you the cutout."
+      : "Original beside result — run removal to cut out the subject.";
+  const downloadSummary = !canWork
+    ? "Waiting for a photo — download unlocks after a cutout exists."
+    : downloaded && downloadInfo
+      ? `Cutout ready at ${downloadInfo.width} by ${downloadInfo.height} pixels.`
+      : removalDone
+        ? "Prepares the transparent PNG and hands it to your browser."
+        : "Waiting for a cutout — download unlocks after stage 2 succeeds.";
+
   return (
-    <div id="remove-studio" ref={rootRef} className="space-y-8">
-      <section
-        aria-labelledby="remove-step-source"
-        className="border-structural border-border-custom bg-surface rounded-sm p-6"
+    <div id="remove-studio" ref={rootRef} className="space-y-6">
+      <p
+        ref={statusRef}
+        tabIndex={-1}
+        role="status"
+        aria-live="polite"
+        className="text-small text-text-muted leading-relaxed outline-none"
       >
-        <h2 id="remove-step-source" className="font-display text-h4 text-text font-bold">
-          01 · Source photo
-        </h2>
-        <p className="text-small text-text-muted mt-2 leading-relaxed">
-          JPEG or PNG up to 8 MB. The file stays on this device — nothing is uploaded.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <input
-            ref={fileRef}
-            id="remove-file"
-            type="file"
-            accept="image/jpeg,image/png"
-            className="sr-only"
-            onChange={(event) => {
-              const input = event.target as HTMLInputElement;
-              void handleFile(input.files?.[0]);
-              input.value = "";
-            }}
-          />
-          <label
-            htmlFor="remove-file"
-            className="bg-primary text-bg border-structural border-text inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-semibold transition-[transform,box-shadow,background-color] duration-200 hover:shadow-[2px_2px_0_var(--color-text)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
-          >
-            <DoodleIcon name="interface/upload" className="size-4" />
-            Choose photo
-          </label>
-          {stage !== "idle" && (
-            <button
-              type="button"
-              onClick={resetAll}
-              className="bg-surface text-text border-structural border-border-custom inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-medium transition-[transform,box-shadow] duration-200 hover:shadow-[2px_2px_0_var(--color-text)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
-            >
-              <DoodleIcon name="interface/sync" className="size-4" />
-              Start over
-            </button>
-          )}
-        </div>
-      </section>
-      <section
-        aria-labelledby="remove-step-compare"
-        className="border-structural border-border-custom bg-surface rounded-sm p-6"
-      >
-        <h2 id="remove-step-compare" className="font-display text-h4 text-text font-bold">
-          02 · Compare
-        </h2>
-        <p className="text-small text-text-muted mt-2 leading-relaxed">
-          Original on the left, background removed on the right. Any JPEG replaces transparency with
-          white — PNG exports keep it.
-        </p>
-        {stage === "idle" ? (
-          <div className="border-border-custom bg-surface-subtle mt-4 flex flex-col items-center gap-2 rounded-md border border-dashed px-6 py-12 text-center">
-            <DoodleIcon name="interface/photo" className="text-text-muted size-8" />
-            <p className="text-small text-text-muted">No photo yet. Choose a photo first.</p>
-          </div>
-        ) : (
-          <div className="mt-4 grid grid-cols-2 items-stretch gap-4">
-            <div className="bg-surface-subtle border-border-custom rounded-md border p-3">
-              <span className="text-caption text-text-muted block font-mono font-bold tracking-wider uppercase">
-                Original
-              </span>
-              {originalRef.current && (
-                <img
-                  src={originalRef.current.src}
-                  alt="The uploaded photo before background removal"
-                  className="border-border-custom mt-2 w-full rounded-md border"
-                />
-              )}
-            </div>
-            <div className="bg-surface-subtle border-border-custom rounded-md border p-3">
-              <span className="text-caption text-text-muted block font-mono font-bold tracking-wider uppercase">
-                Result
-              </span>
-              {cutoutRef.current ? (
-                <div className="transparency-checkerboard border-border-custom mt-2 rounded-md border">
-                  <img
-                    src={cutoutRef.current.src}
-                    alt="The photo with its background removed, shown over a checkerboard so transparency is visible"
-                    className="block w-full bg-transparent"
-                  />
-                </div>
-              ) : (
-                <p className="text-small text-text-muted mt-2 leading-relaxed">
-                  Run removal to see the cutout here.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
-      <section
-        aria-labelledby="remove-step-export"
-        className="border-structural border-border-custom bg-surface rounded-sm p-6"
-      >
-        <h2 id="remove-step-export" className="font-display text-h4 text-text font-bold">
-          03 · Remove &amp; export
-        </h2>
-        <p
-          ref={statusRef}
-          tabIndex={-1}
-          role="status"
-          aria-live="polite"
-          className="text-small text-text-muted mt-2 leading-relaxed outline-none"
-        >
-          {status}
-        </p>
-        {error && (
-          <p
-            role="alert"
-            className="text-small border-structural border-text bg-surface-subtle text-text mt-3 flex items-center gap-2 rounded-md px-3 py-2"
-          >
-            <DoodleIcon name="interface/caution" className="size-3.5 shrink-0" />
-            {error}
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void handleRemove()}
-            disabled={stage === "idle" || stage === "removing"}
-            className="bg-primary text-bg border-structural border-text inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-semibold transition-[transform,box-shadow,background-color] duration-200 hover:shadow-[2px_2px_0_var(--color-text)] disabled:pointer-events-none disabled:opacity-50"
-          >
-            <DoodleIcon name="files/file-image" className="size-4" />
-            {stage === "removing" ? "Removing background…" : "Remove background"}
-          </button>
-          {stage === "removing" && progress !== null && (
-            <p className="text-caption text-text-muted font-mono">Model {progress}%</p>
-          )}
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={stage !== "removed"}
-            className="bg-surface text-text border-structural border-border-custom inline-flex h-11 cursor-pointer items-center gap-2 rounded-md px-5 font-sans font-medium transition-[transform,box-shadow] duration-200 hover:shadow-[2px_2px_0_var(--color-text)] disabled:pointer-events-none disabled:opacity-50"
-          >
-            <DoodleIcon name="interface/download" className="size-4" />
-            Prepare download
-          </button>
-          {downloadUrl && (
-            <a
-              href={downloadUrl}
-              download="cutout.png"
-              className="bg-primary text-bg border-structural border-text inline-flex h-11 items-center gap-2 rounded-md px-5 font-sans font-semibold transition-[transform,box-shadow] duration-200 hover:shadow-[2px_2px_0_var(--color-text)]"
-            >
-              <DoodleIcon name="interface/download" className="size-4" />
-              Download PNG
-            </a>
-          )}
-        </div>
-      </section>
+        {status}
+      </p>
+
+      <SourceStage
+        expanded={expanded === "source"}
+        onToggle={toggleStage}
+        stageState={stageState("source")}
+        canWork={canWork}
+        status={status}
+        isReading={isReading}
+        error={error}
+        fileRef={fileRef}
+        handleFile={handleFile}
+        resetAll={resetAll}
+      />
+
+      <div className="bg-border-custom h-[var(--stroke-hatch)] w-full" aria-hidden="true" />
+
+      <RemoveStage
+        expanded={expanded === "remove"}
+        onToggle={toggleStage}
+        stageState={stageState("remove")}
+        summary={removeSummary}
+        canWork={canWork}
+        stage={stage}
+        error={error}
+        progress={progress}
+        removalPhase={removalPhase}
+        originalSrc={originalRef.current?.src ?? null}
+        cutoutSrc={cutoutRef.current?.src ?? null}
+        handleRemove={handleRemove}
+        runRemoval={runRemoval}
+        handleDeclineConsent={handleDeclineConsent}
+        handleAbortRemoval={handleAbortRemoval}
+        onStartOver={resetAll}
+      />
+
+      <div className="bg-border-custom h-[var(--stroke-hatch)] w-full" aria-hidden="true" />
+
+      <DownloadStage
+        expanded={expanded === "download"}
+        onToggle={toggleStage}
+        stageState={stageState("download")}
+        summary={downloadSummary}
+        canDownload={removalDone}
+        downloadUrl={downloadUrl}
+        downloadInfo={downloadInfo}
+        handleDownload={handleDownload}
+        canWork={canWork}
+        onStartOver={resetAll}
+      />
+
       <aside className="border-border-custom bg-surface-subtle rounded-md border p-4">
         <p className="text-caption text-text-muted leading-relaxed">
-          On-device processing via {REMOVAL_MODEL.name} ({REMOVAL_MODEL.license}). First run
-          downloads a one-time model (~{REMOVAL_MODEL.approximateDownloadMb} MB, browser-cached).
-          Your photo never leaves this device in v1.
+          On-device processing via {REMOVAL_MODEL.name} ({REMOVAL_MODEL.license}). The first run
+          downloads a one-time model (~{REMOVAL_MODEL.approximateDownloadMb} MB, browser-cached) —
+          only after you confirm, and you can cancel while it runs. Your photo never leaves this
+          device.
         </p>
         <p className="text-caption text-text-muted mt-2 leading-relaxed">
           Need a framed ID photo instead? Use the{" "}
           <a href="/crop" className="text-primary underline underline-offset-2">
-            {" "}
             ID Photo Studio
           </a>
           .
