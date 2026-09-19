@@ -54,10 +54,16 @@ VS Code, while Keystatic imposed recurring costs:
 - `@keystatic/astro` / `@keystatic/core` in `package.json` + `pnpm-lock.yaml` —
   left installed so revival is one uncomment (cost: lockfile weight only; the
   integration no longer loads, so there is zero runtime cost).
-- `syncSingletonsPlugin()` in `astro.config.ts` — left in place; harmless
-  without the integration, and needed again on revival.
-- The `CF_DEV=1` adapter gate in `astro.config.ts` stays until a follow-up
-  decides whether plain `astro dev` still needs the conditional.
+- `syncSingletonsPlugin()` was removed from `astro.config.ts` on 2026-09-19
+  (CI fix: its startup file-writes plus `fs.watch` watchers stalled
+  Playwright's `astro dev` webServer boot on ubuntu-latest). Nothing reads
+  `.keystatic/data/` while the editor is suspended, so the mirrors there may
+  drift — re-sync them from `src/content/data/*.json` (strip the `id` key) if
+  Keystatic is ever revived.
+- The adapter gate in `astro.config.ts` is hybrid: default `astro dev` runs
+  adapterless (Node); `CF_DEV=1` emulates workerd for KV/D1 testing;
+  `astro build` / `astro preview` always apply the adapter via argv detection
+  so SSR API routes deploy to Workers.
 
 ## Revival Conditions
 
@@ -68,7 +74,9 @@ slows enough that dual-schema maintenance is cheap.
 ## Revival Steps
 
 1. Uncomment the `keystatic()` integration line in `astro.config.ts` (see the
-   `ADR 0009` comment there).
+   `ADR 0009` comment there) and restore the singleton sync (see the removed
+   `syncSingletonsPlugin()` in git history, or re-sync `.keystatic/data/`
+   one-shot from `src/content/data/*.json` minus the `id` key).
 2. Run a schema-parity audit: every field in `src/content.config.ts` must exist
    in `keystatic.config.ts` (Projects chess fields, Experiments
    `summary`/`objectives`/`keyTakeaway`, and Pages `moves[]`/`facts[]` are known
