@@ -16,10 +16,10 @@ import {
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ cookies, locals }) => {
+export const GET: APIRoute = async ({ cookies }) => {
   try {
     // Determine storage provider (D1 if available via Cloudflare runtime, otherwise Memory Fallback)
-    const envDB = getD1Database(locals);
+    const envDB = await getD1Database();
     const storage = envDB ? createD1StorageProvider(envDB) : memoryStorageProvider;
 
     // Load live game from database or initialize default

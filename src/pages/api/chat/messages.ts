@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { getWorkersEnv } from "../../../lib/bindings";
 
 export const prerender = false;
 
@@ -37,15 +38,18 @@ export interface MinimalKV {
 }
 
 /**
- * Retrieves the KV namespace from the Cloudflare runtime context.
- * Resolves from `locals.CHAT_KV` (injected by the Cloudflare adapter in
- * production Workers) or a `globalThis` override in tests.
- * Returns `null` when running outside Cloudflare (local dev).
+ * Retrieves the KV namespace for the chat room.
+ * Resolution order: `locals.CHAT_KV` (test/global override) → the Workers
+ * `env` via a lazy `cloudflare:workers` import (resolved natively under
+ * workerd in production; fails soft to `null` elsewhere).
+ * Returns `null` when running outside Cloudflare (local dev) — callers fall
+ * back to the in-memory buffer.
  */
-export function getKVNamespace(locals?: App.Locals): MinimalKV | null {
+export async function getKVNamespace(locals?: App.Locals): Promise<MinimalKV | null> {
   try {
     const globalObj = globalThis as unknown as Record<string, unknown>;
-    const kv = (locals?.CHAT_KV || globalObj?.CHAT_KV) as MinimalKV | undefined;
+    const cfEnv = await getWorkersEnv();
+    const kv = (locals?.CHAT_KV || globalObj?.CHAT_KV || cfEnv?.CHAT_KV) as MinimalKV | undefined;
 
     if (kv && typeof kv.get === "function" && typeof kv.put === "function") {
       return kv;
@@ -61,7 +65,7 @@ export function getKVNamespace(locals?: App.Locals): MinimalKV | null {
  * buffer during local development.
  */
 export async function getChatHistory(locals: App.Locals): Promise<ChatMessage[]> {
-  const kv = getKVNamespace(locals);
+  const kv = await getKVNamespace(locals);
   if (kv) {
     try {
       const raw = await kv.get(CHAT_KV_KEY, "json");
@@ -83,7 +87,7 @@ export async function getChatHistory(locals: App.Locals): Promise<ChatMessage[]>
  * mutates the in-memory buffer during local development.
  */
 export async function addChatMessage(locals: App.Locals, msg: ChatMessage): Promise<ChatMessage[]> {
-  const kv = getKVNamespace(locals);
+  const kv = await getKVNamespace(locals);
   if (kv) {
     const existing = await getChatHistory(locals);
     const updated = [...existing, msg].slice(-MAX_CHAT_HISTORY);

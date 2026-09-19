@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { validatePresetId } from "../../../lib/crop/validation";
+import { getWorkersEnv } from "../../../lib/bindings";
 
 export const prerender = false;
 
@@ -15,20 +16,20 @@ interface MinimalKV {
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
 }
 
-function getBinding<K extends keyof App.Locals>(
+async function getBinding<K extends keyof App.Locals>(
   name: K,
   locals?: App.Locals
-): NonNullable<App.Locals[K]> | null {
-  // Bindings are injected by the Cloudflare adapter into `locals` at runtime;
-  // tests can override via `globalThis`. No `cloudflare:workers` import: that
-  // virtual module only resolves under workerd and crashes adapterless Node dev.
-  // `keyof App.Locals` keeps binding names compile-checked (src/env.d.ts).
-  const fromLocals = locals?.[name];
-  if (fromLocals) {
-    return fromLocals as NonNullable<App.Locals[K]>;
-  }
-  const value = (globalThis as unknown as Record<string, unknown>)?.[name] as
-    NonNullable<App.Locals[K]> | undefined;
+): Promise<NonNullable<App.Locals[K]> | null> {
+  // Resolution order: `locals[name]` (test/global override) → the Workers
+  // `env` via a lazy `cloudflare:workers` import. In Astro v7 the adapter no
+  // longer puts bindings on `locals` — the lazy import is the only production
+  // path; it fails soft to `null` under adapterless Node (see
+  // src/lib/bindings.ts). `keyof App.Locals` keeps binding names
+  // compile-checked (src/env.d.ts).
+  const cfEnv = await getWorkersEnv();
+  const value = (locals?.[name] ||
+    (globalThis as unknown as Record<string, unknown>)?.[name] ||
+    cfEnv?.[name]) as NonNullable<App.Locals[K]> | undefined;
   if (value) {
     return value;
   }
@@ -99,7 +100,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return jsonError("A valid processing time is required.");
     }
 
-    const kv = getBinding("CHAT_KV", locals);
+    const kv = await getBinding("CHAT_KV", locals);
     const ip = request.headers.get("cf-connecting-ip") ?? "";
     // Rate limiting is production-only: local dev/E2E shares one miniflare IP,
     // so the per-IP bucket would block legitimate testing for an hour.

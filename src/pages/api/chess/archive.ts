@@ -7,9 +7,9 @@ import {
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ locals }) => {
+export const GET: APIRoute = async () => {
   try {
-    const envDB = getD1Database(locals);
+    const envDB = await getD1Database();
     const storage = envDB ? createD1StorageProvider(envDB) : memoryStorageProvider;
 
     const archives = await storage.getArchivedGames(20);

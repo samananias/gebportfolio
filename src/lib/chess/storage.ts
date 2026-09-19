@@ -1,3 +1,5 @@
+import { getWorkersEnv } from "../bindings";
+
 export interface StoredGameState {
   version: number;
   fen: string;
@@ -110,15 +112,18 @@ export interface D1DatabaseBinding {
 }
 
 /**
- * Safely extracts the D1 database binding from Astro.locals (injected by the
- * Cloudflare adapter in production Workers) or a `globalThis` test override.
- * No `cloudflare:workers` import: that virtual module only resolves under
- * workerd and crashes adapterless Node dev.
+ * Safely extracts the D1 database binding.
+ * Resolution order: `locals.DB` (test/global override) → the Workers `env`
+ * via a lazy `cloudflare:workers` import (resolved natively under workerd in
+ * production; fails soft to `undefined` elsewhere, e.g. adapterless Node
+ * dev/CI — see src/lib/bindings.ts). A static import would crash Node at
+ * module load, which is why the import stays lazy and cached.
  */
-export function getD1Database(locals?: App.Locals): D1DatabaseBinding | undefined {
+export async function getD1Database(locals?: App.Locals): Promise<D1DatabaseBinding | undefined> {
   try {
     const globalObj = globalThis as unknown as Record<string, unknown>;
-    const db = (locals?.DB || globalObj?.DB) as D1DatabaseBinding | undefined;
+    const cfEnv = await getWorkersEnv();
+    const db = (locals?.DB || globalObj?.DB || cfEnv?.DB) as D1DatabaseBinding | undefined;
 
     if (db && typeof db.prepare === "function") {
       return db;
