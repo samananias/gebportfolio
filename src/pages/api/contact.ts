@@ -1,6 +1,4 @@
 import type { APIRoute } from "astro";
-// @ts-expect-error cloudflare:workers virtual module resolved during Cloudflare Workers runtime
-import { env as cfEnv } from "cloudflare:workers";
 
 export const prerender = false;
 
@@ -35,22 +33,22 @@ interface ContactPayload {
   message: string;
 }
 
-function getBinding<T>(name: string): T | null {
-  const sources: unknown[] = [];
-  try {
-    if (typeof cfEnv !== "undefined") {
-      sources.push(cfEnv);
-    }
-  } catch {
-    // cloudflare:workers env unavailable during local dev
+function getBinding<K extends keyof App.Locals>(
+  name: K,
+  locals?: App.Locals
+): NonNullable<App.Locals[K]> | null {
+  // Bindings are injected by the Cloudflare adapter into `locals` at runtime;
+  // tests can override via `globalThis`. No `cloudflare:workers` import: that
+  // virtual module only resolves under workerd and crashes adapterless Node dev.
+  // `keyof App.Locals` keeps binding names compile-checked (src/env.d.ts).
+  const fromLocals = locals?.[name];
+  if (fromLocals) {
+    return fromLocals as NonNullable<App.Locals[K]>;
   }
-  sources.push(globalThis);
-
-  for (const source of sources) {
-    const value = (source as Record<string, unknown>)?.[name] as T | undefined;
-    if (value) {
-      return value;
-    }
+  const value = (globalThis as unknown as Record<string, unknown>)?.[name] as
+    NonNullable<App.Locals[K]> | undefined;
+  if (value) {
+    return value;
   }
   return null;
 }
@@ -163,7 +161,7 @@ async function isRateLimited(kv: MinimalKV | null, ip: string): Promise<boolean>
   return false;
 }
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -188,7 +186,7 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonError("A message is required.");
     }
 
-    const kv = getBinding<MinimalKV>("CHAT_KV");
+    const kv = getBinding("CHAT_KV", locals);
     const ip = request.headers.get("cf-connecting-ip") ?? "";
     // Rate limiting is production-only: local dev/E2E shares one miniflare IP,
     // so the per-IP bucket would block legitimate testing for an hour.
@@ -196,7 +194,7 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonError("Too many messages sent recently. Please try again later.", 429);
     }
 
-    const apiKey = getBinding<string>("BREVO_API_KEY");
+    const apiKey = getBinding("BREVO_API_KEY", locals);
     const delivered = apiKey ? await deliverViaBrevo(apiKey, payload) : false;
 
     if (!delivered) {
