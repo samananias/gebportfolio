@@ -1,7 +1,8 @@
 import { defineConfig } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@astrojs/react";
-import keystatic from "@keystatic/astro";
+// Suspended per ADR 0009 — uncomment with the keystatic() line below on revival.
+// import keystatic from "@keystatic/astro";
 import cloudflare from "@astrojs/cloudflare";
 import fs from "fs";
 import path from "path";
@@ -112,10 +113,24 @@ function syncSingletonsPlugin() {
 }
 
 // https://astro.build/config
+//
+// Note: The Cloudflare adapter is opt-in for local dev because its workerd
+// runtime cannot serve Keystatic's Node-dependent UI/API routes
+// (`module is not defined` via workers/runner-worker). Default `astro dev`
+// runs adapterless (Node) so `/keystatic` works. Set `CF_DEV=1` to emulate
+// the Cloudflare runtime for KV/D1 testing. Builds/preview keep the adapter
+// so SSR API routes (`prerender: false`) still deploy to Workers.
+const useCloudflareAdapter =
+  process.env.CF_DEV === "1" || process.argv.includes("build") || process.argv.includes("preview");
+
 export default defineConfig({
-  adapter: cloudflare({
-    imageService: "passthrough",
-  }),
+  ...(useCloudflareAdapter
+    ? {
+        adapter: cloudflare({
+          imageService: "passthrough",
+        }),
+      }
+    : {}),
   markdown: {
     // Bind Shiki's syntax colors to the design tokens instead of a baked
     // palette (github-dark's comment tokens fail WCAG AA). Token values live
@@ -126,8 +141,10 @@ export default defineConfig({
   },
   integrations: [
     react(),
-    // Only include Keystatic integration in development/preview builds
-    ...(process.env.NODE_ENV === "production" ? [] : [keystatic()]),
+    // Suspended per ADR 0009: Keystatic visual editor is unwired (files-only
+    // content editing via src/content/*). Config, data dir, deps, and the
+    // singleton sync plugin are preserved for a one-uncomment revival.
+    // ...(process.env.NODE_ENV === "production" ? [] : [keystatic()]),
   ],
   devToolbar: {
     // Playwright's webServer boots `astro dev`; the toolbar's fixed overlay
