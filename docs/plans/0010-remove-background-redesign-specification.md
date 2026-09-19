@@ -239,6 +239,41 @@ immediately — no reload, no re-navigation.
 While a photo is loaded, expanding `03 · Download the cutout` reveals
 **Another photo**, which runs the same `resetAll` path.
 
+### Feature 7 — Start over without a page reload
+
+Doing a second removal must never require a page reload. The bench rests on
+stage 02 after a load, so the reset lives **inside the plate that is actually
+expanded**, mirroring the crop frame-stage control added by spec 0009
+Feature 9:
+
+- `02 · Remove the background` carries a full-width secondary **Start over**
+  whenever a photo is loaded (`canWork`). It calls the existing `resetAll`
+  path, so the photo, cutout, progress, error, and any prepared download
+  clear, the file input re-arms, and the bench returns to stage 01.
+- `03 · Download the cutout` carries a full-width secondary **Another photo**
+  under the same `canWork` gate, so the save moment doubles as the "one more"
+  moment.
+
+Photo-dependent state only: the model-consent flag and the mode choice
+persist, exactly as on `/crop`.
+
+Collision is impossible by construction: the bench is an exclusive accordion,
+so only one plate's panel is in the accessibility tree at a time and only one
+reset control is ever reachable.
+
+#### AC 7.1 — Reset is reachable from the resting plate
+
+After a load the bench rests on stage 02 and **Start over** is visible there
+without re-expanding stage 01. Clicking it returns the bench to intake
+(`Cleared. Choose a photo to remove its background.`, empty state restored,
+downstream plates locked again) and the same file can be loaded again
+immediately — no reload, no re-navigation.
+
+#### AC 7.2 — Another photo is reachable from the download plate
+
+While a photo is loaded, expanding `03 · Download the cutout` reveals
+**Another photo**, which runs the same `resetAll` path.
+
 ## 5. UI/UX Considerations
 
 - **Container**: `wide` (matching `/crop`) so the two sibling benches share
@@ -319,7 +354,8 @@ While a photo is loaded, expanding `03 · Download the cutout` reveals
 
 ## Change Log
 
-| Date       | Version | Description                                                                                                                                                                           |
-| ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-18 | 1.0.0   | Initial specification, status In Progress                                                                                                                                             |
-| 2026-09-18 | 1.1.0   | Implemented: bench components in `src/components/remove/`, island and shell rebuild, E2E contract update, full suite and accessibility gates green. Status promoted to `Implemented`. |
+| Date       | Version | Description                                                                                                                                                                                                                                                                                                                      |
+| ---------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-18 | 1.0.0   | Initial specification, status In Progress                                                                                                                                                                                                                                                                                        |
+| 2026-09-18 | 1.1.0   | Implemented: bench components in `src/components/remove/`, island and shell rebuild, E2E contract update, full suite and accessibility gates green. Status promoted to `Implemented`.                                                                                                                                            |
+| 2026-09-19 | 1.2.0   | Feature 7 added: **Start over** on stage 02 and **Another photo** on stage 03 wire the bench back to intake over the existing `resetAll` path — photo-dependent state clears, model consent and mode choice persist, no reload (mirrors spec 0009 Feature 9). New E2E coverage for both reset paths; AC 7 added under section 9. |

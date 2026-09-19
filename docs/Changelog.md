@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (three stamped plates, consent confirm and decline paths, non-fatal
     removal failure, inline upload rejection) and extended with a guard
     asserting that no crop controls exist on the route.
+  - In-place reset without a reload (spec 0010 Feature 7): **Start over** on
+    the remove plate (where the bench rests after a load) and **Another
+    photo** on the download plate both run the shared `resetAll` path —
+    photo, cutout, progress, error, and prepared download clear, the file
+    input re-arms, and the bench returns to stage 01, while the model-consent
+    flag and mode choice persist. E2E covers both reset paths.
   - Documented in spec `0010` and roadmap `0010.1`, with a surface brief at
     `.impeccable/surfaces/src-pages-remove-background-astro.md` that records
     this route superseding the `/crop` brief's "no reshape" anti-goal.
