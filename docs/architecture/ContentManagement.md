@@ -2,12 +2,6 @@
 
 <callout icon="♞">**Status:** Active · **Owner:** Gen · **Last Reviewed:** 2026-07-18</callout>
 
-> **Keystatic suspended (2026-09-19):** the visual editor is unwired per
-> [ADR 0009](../decisions/0009-suspend-keystatic-visual-editor.md). Content
-> editing is files-only via `src/content/*` (see table there);
-> `keystatic.config.ts`, `.keystatic/data/`, and the `@keystatic/*` deps are
-> preserved for a future revival. `/keystatic` 404s in dev — this is expected.
-
 Details of the content layer, collections schemas, and Keystatic rules.
 
 ## Content Collections

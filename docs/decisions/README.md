@@ -12,8 +12,6 @@ Index of architectural decision records (ADRs) for the project.
 - [0006 - Use React Only for Interactive Islands](0006-use-react-only-for-interactive-islands.md) — Approved (2026-07-18)
 - [0007 - Deliver Contact Form via Brevo Transactional Email API](0007-deliver-contact-via-brevo-transactional-api.md) — Approved (2026-09-08)
 - [0008 - ID Photo Studio: Client-Side Removal with Thin Workers Backend](0008-crop-thin-backend-client-removal.md) — Proposed (2026-09-10)
-- [0009 - Suspend Keystatic Visual Editor](0009-suspend-keystatic-visual-editor.md) — Approved (2026-09-19)
-- [0010 - Resolve Cloudflare Bindings via Astro.locals](0010-resolve-bindings-via-astro-locals.md) — Approved (2026-09-19)
 
 ## Status Meanings
 
