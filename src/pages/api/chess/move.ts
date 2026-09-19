@@ -11,7 +11,7 @@ import { verifySession, COOKIE_NAME } from "../../../lib/chess/session";
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, cookies, locals }) => {
+export const POST: APIRoute = async ({ request, cookies }) => {
   try {
     // Verify signed session cookie
     const existingCookie = cookies.get(COOKIE_NAME)?.value;
@@ -36,7 +36,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     }
 
     // Determine storage provider
-    const envDB = getD1Database(locals);
+    const envDB = await getD1Database();
     const storage = envDB ? createD1StorageProvider(envDB) : memoryStorageProvider;
 
     // Load live game from DB

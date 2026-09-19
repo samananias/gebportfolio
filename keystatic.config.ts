@@ -148,6 +148,19 @@ export default config({
       schema: {
         organization: fields.slug({ name: { label: "Organization" } }),
         role: fields.text({ label: "Role" }),
+        type: fields.select({
+          label: "Type",
+          options: [
+            { label: "Full-time", value: "fulltime" },
+            { label: "Contract", value: "contract" },
+            { label: "Internship", value: "internship" },
+            { label: "Freelance", value: "freelance" },
+            { label: "Academic", value: "academic" },
+            { label: "Project", value: "project" },
+            { label: "Leadership", value: "leadership" },
+          ],
+          defaultValue: "project",
+        }),
         start: fields.text({ label: "Start Date (e.g. 2024-01)" }),
         end: fields.text({ label: "End Date (e.g. 2024-06, leave blank for Present)" }),
         location: fields.text({ label: "Location" }),
@@ -160,6 +173,7 @@ export default config({
           label: "Skills Reference",
           itemLabel: (props) => props.value,
         }),
+        url: fields.text({ label: "URL (Optional)" }),
         order: fields.number({ label: "Display Order", defaultValue: 0 }),
       },
     }),

@@ -16,7 +16,7 @@ import {
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ cookies, locals }) => {
+export const POST: APIRoute = async ({ cookies }) => {
   try {
     const existingCookie = cookies.get(COOKIE_NAME)?.value;
     const session = await verifySession(existingCookie);
@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ cookies, locals }) => {
       });
     }
 
-    const envDB = getD1Database(locals);
+    const envDB = await getD1Database();
     const storage = envDB ? createD1StorageProvider(envDB) : memoryStorageProvider;
 
     const game = await storage.getGame();

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Suspended the Keystatic visual editor (ADR 0009): content editing is
+  files-only via `src/content/*`; `keystatic.config.ts`, `.keystatic/data/`,
+  and `@keystatic/*` deps are preserved for a one-uncomment revival. Made the
+  Cloudflare adapter opt-in for `astro dev` (`CF_DEV=1` emulates workerd) and
+  removed the `syncSingletonsPlugin` file-watchers that stalled CI's Playwright
+  webServer boot on ubuntu-latest.
+- Resolved Cloudflare bindings through a lazy, cached `cloudflare:workers`
+  import (`src/lib/bindings.ts`) instead of either a static import (crashed
+  adapterless Node dev/CI at module load) or `Astro.locals` alone (silent
+  production regression — Astro v7's adapter no longer maps bindings onto
+  `locals`, which broke shared chat history and D1 chess persistence across
+  visitors). `getKVNamespace`, `getD1Database`, and the contact/crop
+  `getBinding` helpers now chain `locals`/`globalThis` test overrides to the
+  Workers `env`, failing soft to in-memory fallbacks under plain Node. Typed
+  contract in `src/env.d.ts` (`App.Locals` with `CHAT_KV`, `SESSION`, `DB`,
+  `BREVO_API_KEY`) retained so binding names stay compile-checked (ADR 0010).
+- Stabilized CI E2E startup: Playwright webServer now boots
+  `astro dev --host 127.0.0.1 --port 4321` with `DEBUG=pw:webserver` so a
+  future dev-boot hang logs server output instead of failing silently.
+
 - Redesigned `/remove-background` to parity with the `/crop` Studio surface
   (spec 0010), keeping the tool strictly removal-only:
   - New `src/components/remove/` module mirroring `src/components/crop/`:
