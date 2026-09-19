@@ -90,9 +90,7 @@ jobs:
       - name: Build Site
         run: pnpm run build
 
-      # Playwright's webServer boots adapterless `astro dev` (see
-      # playwright.config.ts); the `pnpm run build` above only warms the Vite
-      # cache so dev startup is faster.
+      # Playwright's webServer config builds the site and serves it via `astro preview`.
       - name: Run E2E Tests
         run: pnpm run test:e2e
 

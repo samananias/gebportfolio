@@ -62,12 +62,11 @@ export default defineConfig({
   ],
 
   /* Auto-start the app so tests can run without a manually started server.
-     Boots adapterless `astro dev` (see astro.config.ts CF_DEV gate) bound to
-     127.0.0.1 so the probe URL below always matches. `astro preview` is not
-     used: `@astrojs/cloudflare` preview requires Wrangler Pages bindings that
-     hang outside Wrangler environments. */
+     Uses `astro dev --force` with `ASTRO_DEV_BACKGROUND: "1"` to suppress Astro v7's
+     `am-i-vibing` agent detection. `@astrojs/cloudflare`'s `astro preview` requires
+     Wrangler Pages bindings that hang outside Wrangler environments. */
   webServer: {
-    command: "pnpm exec astro dev --host 127.0.0.1 --port 4321",
+    command: "pnpm exec astro dev",
     url: "http://127.0.0.1:4321",
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
@@ -77,9 +76,6 @@ export default defineConfig({
       // Disables the Astro dev toolbar (see astro.config.ts devToolbar gate):
       // its fixed overlay intercepts pointer events during E2E interactions.
       PLAYWRIGHT_E2E: "1",
-      // Surface webServer output in CI logs so a future dev-boot hang shows
-      // the server's stdout instead of failing silently at the timeout.
-      DEBUG: "pw:webserver",
     },
   },
 });

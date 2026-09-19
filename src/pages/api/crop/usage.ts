@@ -1,4 +1,6 @@
 import type { APIRoute } from "astro";
+// @ts-expect-error cloudflare:workers virtual module resolved during Cloudflare Workers runtime
+import { env as cfEnv } from "cloudflare:workers";
 import { validatePresetId } from "../../../lib/crop/validation";
 
 export const prerender = false;
@@ -15,22 +17,22 @@ interface MinimalKV {
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
 }
 
-function getBinding<K extends keyof App.Locals>(
-  name: K,
-  locals?: App.Locals
-): NonNullable<App.Locals[K]> | null {
-  // Bindings are injected by the Cloudflare adapter into `locals` at runtime;
-  // tests can override via `globalThis`. No `cloudflare:workers` import: that
-  // virtual module only resolves under workerd and crashes adapterless Node dev.
-  // `keyof App.Locals` keeps binding names compile-checked (src/env.d.ts).
-  const fromLocals = locals?.[name];
-  if (fromLocals) {
-    return fromLocals as NonNullable<App.Locals[K]>;
+function getBinding<T>(name: string): T | null {
+  const sources: unknown[] = [];
+  try {
+    if (typeof cfEnv !== "undefined") {
+      sources.push(cfEnv);
+    }
+  } catch {
+    // cloudflare:workers env unavailable during local dev
   }
-  const value = (globalThis as unknown as Record<string, unknown>)?.[name] as
-    NonNullable<App.Locals[K]> | undefined;
-  if (value) {
-    return value;
+  sources.push(globalThis);
+
+  for (const source of sources) {
+    const value = (source as Record<string, unknown>)?.[name] as T | undefined;
+    if (value) {
+      return value;
+    }
   }
   return null;
 }
@@ -79,7 +81,7 @@ async function isRateLimited(kv: MinimalKV | null, ip: string): Promise<boolean>
  * visitor's device (see ADR 0008); this route only counts honest portfolio
  * metrics ("used N times") with best-effort KV archival.
  */
-export const POST: APIRoute = async ({ request, locals }) => {
+export const POST: APIRoute = async ({ request }) => {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -99,7 +101,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return jsonError("A valid processing time is required.");
     }
 
-    const kv = getBinding("CHAT_KV", locals);
+    const kv = getBinding<MinimalKV>("CHAT_KV");
     const ip = request.headers.get("cf-connecting-ip") ?? "";
     // Rate limiting is production-only: local dev/E2E shares one miniflare IP,
     // so the per-IP bucket would block legitimate testing for an hour.

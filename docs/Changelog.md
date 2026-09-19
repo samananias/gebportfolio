@@ -7,25 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Suspended the Keystatic visual editor (ADR 0009): content editing is
-  files-only via `src/content/*`; `keystatic.config.ts`, `.keystatic/data/`,
-  and `@keystatic/*` deps are preserved for a one-uncomment revival. Made the
-  Cloudflare adapter opt-in for `astro dev` (`CF_DEV=1` emulates workerd) and
-  removed the `syncSingletonsPlugin` file-watchers that stalled CI's Playwright
-  webServer boot on ubuntu-latest.
-- Resolved Cloudflare bindings via `Astro.locals` instead of the
-  `cloudflare:workers` virtual module (ADR 0010): deleted the static
-  `cfEnv` imports in `api/chat/messages.ts`, `api/contact.ts`,
-  `api/crop/usage.ts`, and `lib/chess/storage.ts` so adapterless Node dev
-  loads API modules without crashing; production Workers behavior is unchanged
-  (the adapter injects the same bindings into `locals`). Added the typed
-  contract in `src/env.d.ts` (`App.Locals` with `CHAT_KV`, `SESSION`, `DB`,
-  `BREVO_API_KEY`) so misspelled binding names fail `astro check` instead of
-  silently degrading to in-memory fallbacks.
-- Stabilized CI E2E startup: Playwright webServer now boots
-  `astro dev --host 127.0.0.1 --port 4321` with `DEBUG=pw:webserver` so a
-  future dev-boot hang logs server output instead of failing silently.
-
 - Redesigned `/remove-background` to parity with the `/crop` Studio surface
   (spec 0010), keeping the tool strictly removal-only:
   - New `src/components/remove/` module mirroring `src/components/crop/`:
