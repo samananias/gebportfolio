@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Refactored `AGENTS.md`, `CLAUDE.md`, and `.agents/AGENTS.md` following the
+  `agents-md-authoring` specification: eliminated generic Astro external links,
+  consolidated divergent rules across agent configurations, and structured all
+  mandatory repo invariants (Tailwind CSS v4 CSS-first config, Content Layer
+  loaders, Windows terminal execution, DoodleIcon SVG mandates, and link
+  portability) into a 37-line actionable contract with binary boundaries and
+  triggered pointers.
+- Established `.gitattributes` (`* text=auto eol=lf`) and set `endOfLine: "lf"`
+  in `prettier.config.js` to enforce consistent LF line endings across Windows
+  and Linux environments, eliminating phantom Git diff modifications during
+  Prettier formatting runs.
+
 - Suspended the Keystatic visual editor (ADR 0009): content editing is
   files-only via `src/content/*`; `keystatic.config.ts`, `.keystatic/data/`,
   and `@keystatic/*` deps are preserved for a one-uncomment revival. Made the

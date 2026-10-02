@@ -6,6 +6,7 @@ export default {
   singleQuote: false,
   tabWidth: 2,
   trailingComma: "es5",
+  endOfLine: "lf",
   overrides: [
     {
       files: "*.astro",
