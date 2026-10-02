@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fixed flaky Playwright E2E test `should interpolate through intermediate positions on a fast multi-slide jump` in `tests/e2e/core-mindset-carousel.spec.ts`. Separated the slide 1 parking assertion into its own settled poll before triggering the jump to slide 5, captured intermediate eased transform values directly within browser `requestAnimationFrame` cycles, and explicitly dispatched `scroll` events to prevent synthetic `scrollTo` event coalescing and retry timing loops under throttled CI environments.
+
 - Refactored `AGENTS.md`, `CLAUDE.md`, and `.agents/AGENTS.md` following the
   `agents-md-authoring` specification: eliminated generic Astro external links,
   consolidated divergent rules across agent configurations, and structured all
