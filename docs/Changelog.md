@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `prettier.config.js` to enforce consistent LF line endings across Windows
   and Linux environments, eliminating phantom Git diff modifications during
   Prettier formatting runs.
+- Installed modular agent rule system (`GEMINI.md` and `.agents/rules/` covering
+  common development workflows, coding style, security, and TypeScript standards)
+  and removed deprecated local `accurate-commit-message` skill.
 
 - Suspended the Keystatic visual editor (ADR 0009): content editing is
   files-only via `src/content/*`; `keystatic.config.ts`, `.keystatic/data/`,
