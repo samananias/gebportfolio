@@ -244,15 +244,6 @@ test.describe("Core Mindset Carousel", () => {
     const section = page.locator("section").filter({ has: region });
     const track = page.getByTestId("mindset-track");
 
-    // Derive the fractional slide position from the `pos * GAP_REM` rem term of
-    // the track transform. Browsers merge the two percentage terms into one
-    // signed value, so the gap term is the only reliably separable component.
-    const readPosition = () =>
-      track.evaluate((el) => {
-        const match = /([\d.]+)rem/.exec(el.style.transform);
-        return match ? parseFloat(match[1]) / 1.5 : 0;
-      });
-
     // Park at slide 1 so the smoothed position starts near zero, then jump
     // straight to slide 5's mapped position; mid-flight the track must hold a
     // fractional position strictly between slide 1 and slide 5. The whole
@@ -260,22 +251,53 @@ test.describe("Core Mindset Carousel", () => {
     // (sampling before the scroll handler applies a target, or RAF starvation)
     // must not fail the probe.
     await expect(async () => {
-      await section.evaluate((el) => {
-        const rect = el.getBoundingClientRect();
-        window.scrollTo({ top: window.scrollY + rect.top, behavior: "auto" });
-      });
-      expect(await readPosition()).toBeLessThan(0.05);
+      // 1. Ensure the carousel is settled at slide 1 before triggering the jump
+      await expect(async () => {
+        await section.evaluate((el) => {
+          const rect = el.getBoundingClientRect();
+          window.scrollTo({ top: window.scrollY + rect.top, behavior: "auto" });
+          window.dispatchEvent(new Event("scroll"));
+        });
+        const match = /([\d.]+)rem/.exec(await track.evaluate((el) => el.style.transform));
+        const pos = match ? parseFloat(match[1]) / 1.5 : 0;
+        expect(pos).toBeLessThan(0.05);
+      }).toPass({ timeout: 10_000 });
 
-      await section.evaluate((el) => {
-        const rect = el.getBoundingClientRect();
+      // 2. Jump straight to slide 5 and capture an intermediate in-flight position
+      // directly via browser requestAnimationFrame to avoid CDP round-trip timing races.
+      const intermediatePosition = await page.evaluate(async () => {
+        const track = document.querySelector('[data-testid="mindset-track"]') as HTMLElement;
+        const section = track.closest("section")!;
+        const rect = section.getBoundingClientRect();
         const scrollable = rect.height - window.innerHeight;
+
         window.scrollTo({ top: window.scrollY + rect.top + scrollable, behavior: "auto" });
+        window.dispatchEvent(new Event("scroll"));
+
+        return new Promise<number>((resolve) => {
+          let frames = 0;
+          const check = () => {
+            frames++;
+            const match = /([\d.]+)rem/.exec(track.style.transform);
+            const pos = match ? parseFloat(match[1]) / 1.5 : 0;
+
+            if (pos > 0.2 && pos < 3.8) {
+              resolve(pos);
+              return;
+            }
+            if (pos >= 3.8 || frames > 120) {
+              resolve(pos);
+              return;
+            }
+            requestAnimationFrame(check);
+          };
+          requestAnimationFrame(check);
+        });
       });
 
-      const position = await readPosition();
-      expect(position).toBeGreaterThan(0.2);
-      expect(position).toBeLessThan(3.8);
-    }).toPass({ timeout: 10_000 });
+      expect(intermediatePosition).toBeGreaterThan(0.2);
+      expect(intermediatePosition).toBeLessThan(3.8);
+    }).toPass({ timeout: 15_000 });
   });
 
   test("should fire exactly one pawn hop per fast multi-slide scroll gesture", async ({ page }) => {

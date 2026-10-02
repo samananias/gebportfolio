@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fixed flaky Playwright E2E test `should interpolate through intermediate positions on a fast multi-slide jump` in `tests/e2e/core-mindset-carousel.spec.ts`. Separated the slide 1 parking assertion into its own settled poll before triggering the jump to slide 5, captured intermediate eased transform values directly within browser `requestAnimationFrame` cycles, and explicitly dispatched `scroll` events to prevent synthetic `scrollTo` event coalescing and retry timing loops under throttled CI environments.
+
+- Refactored `AGENTS.md`, `CLAUDE.md`, and `.agents/AGENTS.md` following the
+  `agents-md-authoring` specification: eliminated generic Astro external links,
+  consolidated divergent rules across agent configurations, and structured all
+  mandatory repo invariants (Tailwind CSS v4 CSS-first config, Content Layer
+  loaders, Windows terminal execution, DoodleIcon SVG mandates, and link
+  portability) into a 37-line actionable contract with binary boundaries and
+  triggered pointers.
+- Established `.gitattributes` (`* text=auto eol=lf`) and set `endOfLine: "lf"`
+  in `prettier.config.js` to enforce consistent LF line endings across Windows
+  and Linux environments, eliminating phantom Git diff modifications during
+  Prettier formatting runs.
+- Installed modular agent rule system (`GEMINI.md` and `.agents/rules/` covering
+  common development workflows, coding style, security, and TypeScript standards)
+  and removed deprecated local `accurate-commit-message` skill.
+
 - Suspended the Keystatic visual editor (ADR 0009): content editing is
   files-only via `src/content/*`; `keystatic.config.ts`, `.keystatic/data/`,
   and `@keystatic/*` deps are preserved for a one-uncomment revival. Made the
