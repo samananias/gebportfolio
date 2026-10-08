@@ -35,72 +35,60 @@ function formatRelativeTime(timestamp: number): string {
 interface ChatInputFormProps {
   onSend: (text: string) => void;
   assignedName: string;
-  hasActivePass: boolean;
 }
 
-const ChatInputForm: React.FC<ChatInputFormProps> = React.memo(
-  ({ onSend, assignedName, hasActivePass }) => {
-    const [inputText, setInputText] = useState("");
-    const inputRef = useRef<HTMLInputElement | null>(null);
+const ChatInputForm: React.FC<ChatInputFormProps> = React.memo(({ onSend, assignedName }) => {
+  const [inputText, setInputText] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
-    useEffect(() => {
-      const timer = setTimeout(() => inputRef.current?.focus(), 100);
-      return () => clearTimeout(timer);
-    }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
-    const handleSubmit = (e: React.SyntheticEvent) => {
-      e.preventDefault();
-      const trimmed = inputText.trim();
-      if (!trimmed) return;
-      onSend(trimmed);
-      setInputText("");
-    };
+  const handleSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    const trimmed = inputText.trim();
+    if (!trimmed) return;
+    onSend(trimmed);
+    setInputText("");
+  };
 
-    return (
-      <footer className="border-border-custom/60 mt-3 shrink-0 border-t pt-3">
-        <div className="text-text-muted mb-1.5 flex items-center justify-between font-mono text-[11px]">
-          <div>
-            chatting as <span className="text-text font-bold">{assignedName}</span>
-          </div>
-          {hasActivePass && (
-            <span
-              title="Verified session active. Chat smoothly without CAPTCHA challenges."
-              className="flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
-            >
-              <DoodleIcon name="shield" className="size-3" />
-              15m Pass Active
-            </span>
-          )}
+  return (
+    <footer className="border-border-custom/60 mt-3 shrink-0 border-t pt-3">
+      <div className="text-text-muted mb-1.5 flex items-center justify-between font-mono text-[11px]">
+        <div>
+          chatting as <span className="text-text font-bold">{assignedName}</span>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            maxLength={280}
+            placeholder="say something..."
+            className="bg-surface border-border-custom text-text placeholder:text-text-muted focus:ring-primary w-full rounded-xl border py-2 pr-12 pl-3 font-sans text-xs outline-none focus:ring-2"
+          />
+          <span className="text-text-muted absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[9px]">
+            {inputText.length}/280
+          </span>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              maxLength={280}
-              placeholder="say something..."
-              className="bg-surface border-border-custom text-text placeholder:text-text-muted focus:ring-primary w-full rounded-xl border py-2 pr-12 pl-3 font-sans text-xs outline-none focus:ring-2"
-            />
-            <span className="text-text-muted absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[9px]">
-              {inputText.length}/280
-            </span>
-          </div>
-
-          <button
-            type="submit"
-            disabled={!inputText.trim()}
-            className="bg-primary border-primary shrink-0 cursor-pointer rounded-xl border px-3 py-2 font-mono text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
-          >
-            send ↵
-          </button>
-        </form>
-      </footer>
-    );
-  }
-);
+        <button
+          type="submit"
+          disabled={!inputText.trim()}
+          className="bg-primary border-primary shrink-0 cursor-pointer rounded-xl border px-3 py-2 font-mono text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+        >
+          send ↵
+        </button>
+      </form>
+    </footer>
+  );
+});
 
 // Reusable Gate Turnstile Widget for modal screens
 interface TurnstileGateWidgetProps {
@@ -423,31 +411,31 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
 
       {/* 1. Mandatory Onboarding Screen (First-time visitor) */}
       {!hasOnboarded ? (
-        <div className="bg-bg border-border-custom relative z-10 w-full max-w-md rounded-2xl border p-6 shadow-2xl backdrop-blur-xl">
+        <div className="border-border-custom bg-surface relative z-10 w-full max-w-md rounded-2xl border-2 p-6 text-left shadow-[4px_4px_0_var(--color-border)] sm:p-7">
           <button
             type="button"
             onClick={onClose}
             aria-label="Close chat modal"
-            className="text-text-muted hover:text-text absolute top-4 right-4 flex cursor-pointer items-center justify-center rounded-full p-1 text-lg leading-none transition-colors"
+            className="border-border-custom text-text-muted hover:text-text hover:bg-surface-subtle absolute top-4 right-4 flex size-8 cursor-pointer items-center justify-center rounded-lg border transition-colors"
           >
-            <DoodleIcon name="cross" className="size-4" />
+            <DoodleIcon name="cross" className="size-3.5" />
           </button>
 
-          <div className="bg-primary/10 border-primary/20 text-primary mx-auto mb-4 flex size-12 items-center justify-center rounded-full border text-2xl">
-            ♞
+          <div className="border-border-custom bg-surface-subtle text-primary mx-auto mb-4 flex size-12 items-center justify-center rounded-xl border shadow-[2px_2px_0_var(--color-border)]">
+            <DoodleIcon name="user" className="text-primary size-6" />
           </div>
 
-          <h3 className="font-display text-text mb-1 text-center text-xl font-bold">
+          <h3 className="font-display text-text mb-2 text-center text-2xl font-bold tracking-tight">
             Enter Handle to Play Chess & Chat
           </h3>
-          <p className="text-text-muted mb-4 text-center font-sans text-xs leading-relaxed">
-            Choose a display name for this session. Entering your handle unlocks the live chat room
-            and assigns you to a crowd-chess team!
+          <p className="text-text-muted mb-5 text-center font-sans text-xs leading-relaxed">
+            Choose a display name for this session to enter the live chat room and join the communal
+            chess team!
           </p>
 
           {activeError && (
-            <div className="border-border-custom mb-4 flex items-center justify-between rounded border bg-rose-500/10 px-3 py-2 font-mono text-xs text-rose-700 dark:text-rose-300">
-              <span className="flex items-center gap-1.5 truncate">
+            <div className="border-border-custom mb-4 flex items-center justify-between rounded-xl border bg-rose-500/10 px-3.5 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-300">
+              <span className="flex items-center gap-2 truncate">
                 <DoodleIcon name="caution" className="size-3.5 shrink-0" />
                 {activeError}
               </span>
@@ -457,7 +445,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
                   setValidationError(null);
                   clearError();
                 }}
-                className="ml-2 text-rose-600 hover:underline dark:text-rose-400"
+                className="ml-2 shrink-0 cursor-pointer font-semibold text-rose-600 hover:underline dark:text-rose-400"
               >
                 Dismiss
               </button>
@@ -468,39 +456,47 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
             <div className="relative text-left">
               <label
                 htmlFor="onboarding-username"
-                className="text-text-muted mb-1 block font-mono text-xs font-semibold"
+                className="text-text mb-1.5 block font-mono text-xs font-semibold"
               >
-                Display Name (3–20 characters)
+                Display Name <span className="text-text-muted font-normal">(3–20 characters)</span>
               </label>
-              <input
-                id="onboarding-username"
-                ref={onboardingInputRef}
-                type="text"
-                value={onboardingInput}
-                onChange={(e) => {
-                  setOnboardingInput(e.target.value);
-                  if (validationError) setValidationError(null);
-                }}
-                maxLength={20}
-                placeholder="e.g. TacticalKnight"
-                className="bg-surface border-border-custom text-text placeholder:text-text-muted focus:ring-primary w-full rounded-lg border px-3.5 py-2.5 font-sans text-sm outline-none focus:ring-2"
-              />
-              <span className="text-text-muted absolute top-8 right-3 font-mono text-[10px]">
-                {onboardingInput.trim().length}/20
-              </span>
+              <div className="relative">
+                <input
+                  id="onboarding-username"
+                  ref={onboardingInputRef}
+                  type="text"
+                  value={onboardingInput}
+                  onChange={(e) => {
+                    setOnboardingInput(e.target.value);
+                    if (validationError) setValidationError(null);
+                  }}
+                  maxLength={20}
+                  placeholder="e.g. TacticalKnight"
+                  className="border-border-custom bg-surface-subtle text-text placeholder:text-text-muted focus:border-primary focus:bg-surface w-full rounded-xl border px-3.5 py-2.5 font-sans text-sm transition-colors outline-none"
+                />
+                <span className="text-text-muted absolute top-1/2 right-3 -translate-y-1/2 font-mono text-[10px]">
+                  {onboardingInput.trim().length}/20
+                </span>
+              </div>
             </div>
 
-            <div className="my-2">
-              <TurnstileGateWidget
-                onVerify={handleOnboardingVerify}
-                onExpire={handleOnboardingExpire}
-              />
+            <div className="border-border-custom/80 bg-surface-subtle/40 rounded-xl border p-3">
+              <div className="text-text-muted mb-2 flex items-center justify-center gap-1.5 font-mono text-[11px]">
+                <DoodleIcon name="lock" className="text-primary size-3" />
+                <span>Security Verification</span>
+              </div>
+              <div className="flex min-h-[65px] items-center justify-center overflow-hidden">
+                <TurnstileGateWidget
+                  onVerify={handleOnboardingVerify}
+                  onExpire={handleOnboardingExpire}
+                />
+              </div>
             </div>
 
             <button
               type="submit"
               disabled={onboardingInput.trim().length < 3 || isVerifying}
-              className="bg-primary border-primary w-full cursor-pointer rounded-lg border py-2.5 font-mono text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+              className="bg-primary border-primary hover:bg-primary-hover w-full cursor-pointer rounded-xl border px-4 py-2.5 font-mono text-sm font-semibold text-white shadow-[2px_2px_0_var(--color-border)] transition-all active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
             >
               {isVerifying ? "Verifying & Joining..." : "Play & Join Chat ♞"}
             </button>
@@ -508,31 +504,44 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
         </div>
       ) : !hasActivePass ? (
         /* 2. Human Verification Gate Screen (Returning user or pass expired) */
-        <div className="bg-bg border-border-custom relative z-10 w-full max-w-md rounded-2xl border p-6 shadow-2xl backdrop-blur-xl">
+        <div className="border-border-custom bg-surface relative z-10 w-full max-w-md rounded-2xl border-2 p-6 text-center shadow-[4px_4px_0_var(--color-border)] sm:p-7">
           <button
             type="button"
             onClick={onClose}
             aria-label="Close chat modal"
-            className="text-text-muted hover:text-text absolute top-4 right-4 flex cursor-pointer items-center justify-center rounded-full p-1 text-lg leading-none transition-colors"
+            className="border-border-custom text-text-muted hover:text-text hover:bg-surface-subtle absolute top-4 right-4 flex size-8 cursor-pointer items-center justify-center rounded-lg border transition-colors"
           >
-            <DoodleIcon name="cross" className="size-4" />
+            <DoodleIcon name="cross" className="size-3.5" />
           </button>
 
-          <div className="bg-primary/10 border-primary/20 text-primary mx-auto mb-4 flex size-12 items-center justify-center rounded-full border text-2xl">
+          <div className="border-border-custom bg-surface-subtle text-primary mx-auto mb-4 flex size-12 items-center justify-center rounded-xl border shadow-[2px_2px_0_var(--color-border)]">
             <DoodleIcon name="shield" className="text-primary size-6" />
           </div>
 
-          <h3 className="font-display text-text mb-1 text-center text-xl font-bold">
+          <h3 className="font-display text-text mb-2 text-center text-2xl font-bold tracking-tight">
             Verify to Enter Arena
           </h3>
           <p className="text-text-muted mb-4 text-center font-sans text-xs leading-relaxed">
-            Welcome back, <strong className="text-text font-semibold">{displayName}</strong>! Quick
-            security verification is required to participate in live chat and play shared chess.
+            Security verification is required to participate in live chat and submit shared chess
+            moves.
           </p>
 
+          {/* Player Callsign Badge */}
+          <div className="border-border-custom bg-surface-subtle/70 mb-4 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left">
+            <div className="border-border-custom bg-surface text-primary flex size-8 shrink-0 items-center justify-center rounded-lg border">
+              <DoodleIcon name="user" className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-text-muted font-mono text-[10px] tracking-wider uppercase">
+                Player Callsign
+              </div>
+              <div className="text-text truncate font-mono text-xs font-bold">{displayName}</div>
+            </div>
+          </div>
+
           {activeError && (
-            <div className="border-border-custom mb-4 flex items-center justify-between rounded border bg-rose-500/10 px-3 py-2 font-mono text-xs text-rose-700 dark:text-rose-300">
-              <span className="flex items-center gap-1.5 truncate">
+            <div className="border-border-custom mb-4 flex items-center justify-between rounded-xl border bg-rose-500/10 px-3.5 py-2.5 font-mono text-xs text-rose-700 dark:text-rose-300">
+              <span className="flex items-center gap-2 truncate">
                 <DoodleIcon name="caution" className="size-3.5 shrink-0" />
                 {activeError}
               </span>
@@ -542,28 +551,41 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
                   setValidationError(null);
                   clearError();
                 }}
-                className="ml-2 text-rose-600 hover:underline dark:text-rose-400"
+                className="ml-2 shrink-0 cursor-pointer font-semibold text-rose-600 hover:underline dark:text-rose-400"
               >
                 Dismiss
               </button>
             </div>
           )}
 
-          <div className="my-4">
-            <TurnstileGateWidget
-              onVerify={handleGateVerify}
-              onExpire={() => setIsVerifying(false)}
-            />
+          {/* Framed Turnstile Challenge Plate */}
+          <div className="border-border-custom/80 bg-surface-subtle/40 mb-4 rounded-xl border p-3">
+            <div className="text-text-muted mb-2.5 flex items-center justify-center gap-1.5 font-mono text-[11px]">
+              <DoodleIcon name="lock" className="text-primary size-3" />
+              <span>Cloudflare Turnstile Gate</span>
+            </div>
+            <div className="flex min-h-[65px] items-center justify-center overflow-hidden">
+              <TurnstileGateWidget
+                onVerify={handleGateVerify}
+                onExpire={() => setIsVerifying(false)}
+              />
+            </div>
           </div>
 
-          {isVerifying && (
-            <p className="text-primary animate-pulse text-center font-mono text-xs font-semibold">
-              Activating 15-minute pass...
-            </p>
+          {isVerifying ? (
+            <div className="text-primary flex items-center justify-center gap-2 py-1 font-mono text-xs font-semibold">
+              <span className="bg-primary size-1.5 animate-pulse rounded-full" />
+              <span>Activating security pass...</span>
+            </div>
+          ) : (
+            <div className="text-text-muted flex items-center justify-center gap-1.5 font-mono text-[11px]">
+              <DoodleIcon name="sparkle" className="text-primary size-3" />
+              <span>Grants live arena access</span>
+            </div>
           )}
         </div>
       ) : (
-        /* 3. Onboarded Dual Panel Layout (Active 15-minute pass) */
+        /* 3. Onboarded Dual Panel Layout (Active security pass) */
         <div className="pointer-events-none relative z-10 flex h-[88vh] w-full max-w-7xl flex-col items-stretch justify-between gap-4 md:flex-row md:gap-6">
           {/* Mobile Tab Switcher (< md screens) */}
           <div className="border-border-custom bg-bg/95 pointer-events-auto flex items-center justify-between rounded-xl border p-1.5 backdrop-blur-xl md:hidden">
@@ -689,11 +711,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
             />
 
             {/* Footer Input Form */}
-            <ChatInputForm
-              onSend={sendMessage}
-              assignedName={assignedName || displayName}
-              hasActivePass={hasActivePass}
-            />
+            <ChatInputForm onSend={sendMessage} assignedName={assignedName || displayName} />
           </div>
 
           {/* CENTER SPACER: Allows Portfolio Hero / Content to show cleanly between the two panels */}

@@ -225,8 +225,13 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
     };
   }, [isOpen, fetchMessages]);
 
-  // Action: Set Initial Username (Onboarding)
+  // Action: Set Initial Username (Onboarding — single-use only)
   const setUsername = useCallback((newName: string): boolean => {
+    // If username is already set, enforce one-time naming rule
+    if (displayNameRef.current && displayNameRef.current.trim().length >= 3) {
+      return true;
+    }
+
     const validation = validateUsername(newName);
     if (!validation.valid) {
       setError(validation.error || "Invalid username.");

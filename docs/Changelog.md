@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Enforced immutable, single-use handle naming and streamlined chatbox input interface:
+  - Removed the "Change" user button and handle resetting logic from the gate screen, ensuring visitors only name their user handle once upon initial onboarding.
+  - Hardened `setUsername()` in `src/components/chat/useChatSocket.ts` so once established, a user's handle cannot be overwritten.
+  - Removed the "15m Pass Active" badge from the chatbox input footer (`ChatInputForm` in `ChatBox.tsx`), providing a clean "chatting as <handle>" presence display without extraneous pass timers.
+  - Refined modal verification microcopy to reference arena security access rather than 15-minute countdowns.
+- Redesigned the Live Arena onboarding and security verification gate modals (`ChatBox.tsx`) following the Woodcut & Engraving visual theme:
+  - Replaced generic glassy floating dialog with a tactile, opaque `border-2 border-border-custom bg-surface` card carrying the brand's structural offset shadow (`shadow-[4px_4px_0_var(--color-border)]`).
+  - Added a recessed **Player Callsign Badge** displaying active handle identity with a woodcut user icon.
+  - Enclosed the Turnstile challenge in a dedicated framed inspection plate (`border border-border-custom/80 bg-surface-subtle/40`) with an explicit status label.
+  - Applied tactile framed close buttons and structured heraldry crest icon containers, eliminating raw unicode emoji in UI markup.
 - Fixed React hook ordering crash (`Minified React error #310` / "Rendered more hooks than during previous render") in `src/components/chat/ChatBox.tsx` by declaring all `useCallback` verification handlers unconditionally before the `if (!isOpen) return null;` early return statement.
 - Added wildcard suffix matching for Cloudflare Pages (`*.pages.dev`) and Workers (`*.workers.dev`) preview hostnames to `isOriginAllowed()` in `src/lib/rateLimit.ts` to ensure branch preview deployments pass request origin checks.
 - Implemented multi-layer anti-bot defenses and edge rate limiting across live chat and chess endpoints (ADR 0011):
