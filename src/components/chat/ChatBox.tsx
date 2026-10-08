@@ -308,6 +308,25 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
     setGameState(state);
   }, []);
 
+  const handleOnboardingVerify = useCallback((token: string) => {
+    setOnboardingToken(token);
+  }, []);
+
+  const handleOnboardingExpire = useCallback(() => {
+    setOnboardingToken("");
+  }, []);
+
+  const handleGateVerify = useCallback(
+    async (token: string) => {
+      if (!token || isVerifying) return;
+      setIsVerifying(true);
+      setValidationError(null);
+      await verifyAndActivatePass(token, displayName);
+      setIsVerifying(false);
+    },
+    [isVerifying, verifyAndActivatePass, displayName]
+  );
+
   // Focus input when onboarding opens
   useEffect(() => {
     if (isOpen && !hasOnboarded) {
@@ -336,8 +355,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
       };
     }
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const handleOnboardingSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
@@ -387,24 +404,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
     setValidationError(null);
   };
 
-  const handleOnboardingVerify = useCallback((token: string) => {
-    setOnboardingToken(token);
-  }, []);
-
-  const handleOnboardingExpire = useCallback(() => {
-    setOnboardingToken("");
-  }, []);
-
-  const handleGateVerify = useCallback(
-    async (token: string) => {
-      if (!token || isVerifying) return;
-      setIsVerifying(true);
-      setValidationError(null);
-      await verifyAndActivatePass(token, displayName);
-      setIsVerifying(false);
-    },
-    [isVerifying, verifyAndActivatePass, displayName]
-  );
+  if (!isOpen) return null;
 
   const activeError = validationError || error;
 

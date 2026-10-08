@@ -73,6 +73,8 @@ export function isOriginAllowed(request: Request): boolean {
       if (
         allowedHosts.has(parsed.host) ||
         allowedHosts.has(parsed.hostname) ||
+        parsed.hostname.endsWith(".pages.dev") ||
+        parsed.hostname.endsWith(".workers.dev") ||
         (host && (parsed.host === host || parsed.hostname === host.split(":")[0]))
       ) {
         return true;
@@ -88,6 +90,8 @@ export function isOriginAllowed(request: Request): boolean {
       if (
         allowedHosts.has(parsed.host) ||
         allowedHosts.has(parsed.hostname) ||
+        parsed.hostname.endsWith(".pages.dev") ||
+        parsed.hostname.endsWith(".workers.dev") ||
         (host && (parsed.host === host || parsed.hostname === host.split(":")[0]))
       ) {
         return true;

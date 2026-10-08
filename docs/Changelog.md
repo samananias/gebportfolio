@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fixed React hook ordering crash (`Minified React error #310` / "Rendered more hooks than during previous render") in `src/components/chat/ChatBox.tsx` by declaring all `useCallback` verification handlers unconditionally before the `if (!isOpen) return null;` early return statement.
+- Added wildcard suffix matching for Cloudflare Pages (`*.pages.dev`) and Workers (`*.workers.dev`) preview hostnames to `isOriginAllowed()` in `src/lib/rateLimit.ts` to ensure branch preview deployments pass request origin checks.
 - Implemented multi-layer anti-bot defenses and edge rate limiting across live chat and chess endpoints (ADR 0011):
   - Created `src/lib/rateLimit.ts` providing zero-overhead in-memory edge isolate rate limiting, origin/referer verification against third-party bot scripts, and server-side sender moderation.
   - Hardened `POST /api/chat/send` with strict IP rate limiting (5 msgs/min with a 3s cooldown), honeypot traps (`website`, `_hp`), and server-side blacklist for reserved and AI model tokens (`anthropic`, `gpt`, `bot`, `admin`).
