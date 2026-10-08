@@ -81,16 +81,21 @@ Cloudflare Turnstile bot deterrence is integrated end-to-end across both public 
      - Container rendered in `src/pages/contact.astro` with `class="cf-turnstile"`, `data-sitekey`, and `data-action="contact"`.
      - Token lifecycle: single-use token sent in `cf-turnstile-response`; reset upon delivery error or "Compose another".
      - Handler contract: "gate, don't replace" — `POST /api/contact` verifies token against `https://challenges.cloudflare.com/turnstile/v0/siteverify` before calling Brevo delivery.
-   - **Live Chat** (`ChatBox` & `POST /api/chat/send`):
-     - Action: `chat`.
-     - **15-Minute Human Chat Pass**: On initial join or when the pass expires, the Turnstile widget renders in `ChatInputForm`. Upon verification, the server issues an HMAC-SHA256 signed `chat_pass` bound to `clientIp` and an unforgeable 15-minute expiration timestamp (`issueChatPass()`).
-     - Session experience: During the 15-minute window, human visitors chat seamlessly with zero CAPTCHA interruptions. The Turnstile challenge box remains unmounted and an active session badge is displayed.
-     - Auto-Renewal: When the 15-minute pass elapses, the server returns `requireTurnstile: true`, prompting a 1-second Turnstile re-verification to issue a fresh pass.
-     - Bot Defense: Automated scripts lacking a browser cannot obtain a pass. An attacker who manually extracts a cookie is restricted by the IP-bound HMAC signature, strictly throttled to 5 msgs/min (3s cooldown), and terminated at minute 15.
+   - **Live Arena & Chat Modal Gate** (`ChatBox`, `POST /api/chat/verify`, `POST /api/chat/send`, & `POST /api/chess/move`):
+     - Action: `chat` / `live`.
+     - **Modal Entry Gate Architecture**: Rather than embedding CAPTCHA widgets inside the chatbox input bar, Turnstile verification is presented when opening the live modal:
+       1. _First-time onboarding_: The user chooses their handle and solves the Turnstile challenge on the onboarding screen before entering.
+       2. _Returning visitors & pass renewal_: When returning or upon 15-minute pass expiry, a centered "Verify to Enter Arena" gate screen appears.
+     - **Unified 15-Minute Arena Pass**: Verifying via `POST /api/chat/verify` issues an HMAC-SHA256 signed `chat_pass` (stored in `sessionStorage` and `chat_pass` cookie) bound to client IP and an unforgeable 15-minute expiration timestamp (`issueChatPass()`).
+     - **Protects Both Chat & Chess**:
+       - _Live Chat_: Sending messages checks the active pass. The chat input bar remains completely clean without embedded iframes.
+       - _Shared Chess_: Making moves (`POST /api/chess/move`) attaches the `x-chat-pass` header and validates the active session pass. Bot moves without an active pass are rejected with HTTP 403 `requireTurnstile: true`.
+     - **Auto-Renewal & Expiry Handling**: When the pass expires after 15 minutes, both chess moves and chat actions trigger the re-verification gate to obtain a fresh pass seamlessly.
+     - **Preview Host Tolerance**: Detects preview deployments (`*.pages.dev`, `*.workers.dev`). If `TURNSTILE_SECRET` has not yet been mirrored into Cloudflare Pages Preview variables, permits verification for testing while logging configuration guidance.
 
 3. **Validation & Dev Bypassing**:
    - In development and Playwright E2E suites (`!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1"`), requests without secret or with dummy tokens succeed to prevent CI flakiness and maintain zero-latency development workflows.
-   - In production, missing secrets or invalid tokens are strictly blocked at the boundary. Cloudflare Pages preview deployment subdomains (`*.pages.dev`, `*.gebportfolio.pages.dev`) are verified as trusted hosts.
+   - In production, missing secrets or invalid tokens are strictly blocked at the boundary. Preview hostnames (`*.pages.dev`, `*.workers.dev`) are granted preview tolerance if the secret is not yet configured.
 
 ---
 

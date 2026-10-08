@@ -139,10 +139,11 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const assignment = freshArbiter.assign({ sessionId: newSessionId });
     const newCookieValue = await signSession(newSessionId, assignment.side);
 
+    const isSecure = import.meta.env.PROD && process.env.PLAYWRIGHT_E2E !== "1";
     cookies.set(COOKIE_NAME, newCookieValue, {
       path: "/",
       httpOnly: true,
-      secure: true,
+      secure: isSecure,
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 365,
     });

@@ -159,9 +159,14 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
       setIsSubmitting(true);
 
       try {
+        const activePass =
+          typeof window !== "undefined" ? sessionStorage.getItem("portfolio_chat_pass_v1") : null;
         const res = await fetch("/api/chess/move", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(activePass ? { "x-chat-pass": activePass } : {}),
+          },
           body: JSON.stringify({
             move: sanMove,
             version: gameState.version,
@@ -189,7 +194,10 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
             chessAudio.playMove();
           }
         } else {
-          if (data.reason === "superseded") {
+          if (data.requireTurnstile) {
+            window.dispatchEvent(new CustomEvent("portfolio-chat-require-pass"));
+            showToast("Session pass expired. Please verify to continue playing.");
+          } else if (data.reason === "superseded") {
             showToast("A teammate moved first!");
             if (data.publicView) {
               setGameState(data.publicView);

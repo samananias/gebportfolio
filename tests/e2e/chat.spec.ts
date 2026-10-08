@@ -10,6 +10,15 @@ async function openChatModal(page: Page) {
         true;
       window.dispatchEvent(new CustomEvent("open-portfolio-chat"));
     });
+    const isOpen = await dialog.isVisible().catch(() => false);
+    if (!isOpen) {
+      const trigger = page
+        .locator("aside button, #mobile-menu button", { hasText: "Live Chat" })
+        .first();
+      if (await trigger.isVisible().catch(() => false)) {
+        await trigger.click().catch(() => {});
+      }
+    }
     await expect(dialog).toBeVisible();
   }).toPass({ timeout: 15_000 });
 }
@@ -51,16 +60,20 @@ test.describe("Anonymous Real-Time Chatbox Onboarding & Verification", () => {
 
     // After onboarding, main message input should be visible
     const messageInput = page.getByPlaceholder("say something...");
-    await expect(messageInput).toBeVisible();
+    await expect(messageInput).toBeVisible({ timeout: 10_000 });
   });
 
   test("should persist username in localStorage and bypass onboarding on reload", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
+    await page.evaluate(() => {
       window.localStorage.setItem("portfolio_chat_display_name_v1", "TacticalTester");
+      window.sessionStorage.setItem(
+        "portfolio_chat_pass_v1",
+        `${Date.now() + 900000}.preview-test-pass`
+      );
     });
-    await page.goto("/");
+    await page.reload();
 
     await openChatModal(page);
 

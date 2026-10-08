@@ -96,12 +96,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     let activePass = isPassValid ? providedPass : null;
 
     if (!isPassValid) {
+      const requestHost = request.headers.get("host") || new URL(request.url).host;
+
       // Pass is absent or expired: require Turnstile challenge token
       const turnstileResult = await verifyTurnstileToken({
         token: body["cf-turnstile-response"],
         secret: turnstileSecret,
         clientIp,
         expectedAction: "chat",
+        requestHostname: requestHost,
       });
 
       if (!turnstileResult.success) {

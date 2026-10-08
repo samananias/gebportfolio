@@ -26,7 +26,8 @@ export interface UseChatSocketReturn {
   hasActivePass: boolean;
   error: string | null;
   typingUsers: string[];
-  sendMessage: (text: string, turnstileToken?: string) => boolean;
+  sendMessage: (text: string) => boolean;
+  verifyAndActivatePass: (token: string, nameOverride?: string) => Promise<boolean>;
   setUsername: (newName: string) => boolean;
   sendTypingSignal: (isTyping: boolean) => void;
   clearError: () => void;
@@ -36,7 +37,7 @@ const DISPLAY_NAME_KEY = "portfolio_chat_display_name_v1";
 const SESSION_STORAGE_KEY = "portfolio_chat_session_token_v1";
 const CHAT_PASS_STORAGE_KEY = "portfolio_chat_pass_v1";
 
-function getStoredChatPass(): string | null {
+export function getStoredChatPass(): string | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(CHAT_PASS_STORAGE_KEY);
@@ -246,9 +247,66 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
     return true;
   }, []);
 
+  // Action: Verify Turnstile and activate 15-minute pass
+  const verifyAndActivatePass = useCallback(
+    async (token: string, nameOverride?: string): Promise<boolean> => {
+      if (!token) return false;
+      const targetName = nameOverride?.trim() || displayName || "Guest";
+      try {
+        const res = await fetch("/api/chat/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sender: targetName,
+            "cf-turnstile-response": token,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          setError(data.error || "Security verification failed. Please try again.");
+          return false;
+        }
+
+        if (data.chatPass) {
+          storeChatPass(data.chatPass);
+          setHasActivePass(true);
+        }
+        setError(null);
+        return true;
+      } catch (err) {
+        console.error("[Pass Verification Error]:", err);
+        setError("Network error during verification. Please try again.");
+        return false;
+      }
+    },
+    [displayName]
+  );
+
+  // Global listener for expired pass triggered by chess moves or other actions
+  useEffect(() => {
+    const handleRequirePass = () => {
+      clearStoredChatPass();
+      setHasActivePass(false);
+    };
+    window.addEventListener("portfolio-chat-require-pass", handleRequirePass);
+    return () => window.removeEventListener("portfolio-chat-require-pass", handleRequirePass);
+  }, []);
+
+  // Periodic pass freshness check (runs every 5 seconds)
+  useEffect(() => {
+    const checkPass = () => {
+      const active = !!getStoredChatPass();
+      setHasActivePass(active);
+    };
+    checkPass();
+    const timer = setInterval(checkPass, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Action: Send Message via HTTP POST
   const sendMessage = useCallback(
-    (text: string, turnstileToken?: string): boolean => {
+    (text: string): boolean => {
       const trimmed = text.trim();
       if (!trimmed) return false;
 
@@ -278,7 +336,6 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
           avatar,
           text: trimmed,
           chatPass: activePass || undefined,
-          "cf-turnstile-response": turnstileToken || "",
         }),
       })
         .then(async (res) => {
@@ -332,6 +389,7 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
     error,
     typingUsers: [],
     sendMessage,
+    verifyAndActivatePass,
     setUsername,
     sendTypingSignal,
     clearError,

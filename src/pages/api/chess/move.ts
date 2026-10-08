@@ -9,10 +9,11 @@ import {
 } from "../../../lib/chess/storage";
 import { verifySession, COOKIE_NAME } from "../../../lib/chess/session";
 import { getClientIp, isOriginAllowed, checkRateLimit } from "../../../lib/rateLimit";
+import { getTurnstileSecret, verifyChatPass, getCookie } from "../../../lib/turnstile";
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, cookies }) => {
+export const POST: APIRoute = async ({ request, cookies, locals }) => {
   try {
     // 1. Origin verification
     if (!isOriginAllowed(request)) {
@@ -44,6 +45,31 @@ export const POST: APIRoute = async ({ request, cookies }) => {
             "Content-Type": "application/json",
             "Retry-After": String(Math.ceil((rateCheck.retryAfterMs || 2500) / 1000)),
           },
+        }
+      );
+    }
+
+    // 3. Human verification pass (15-Minute session pass)
+    const turnstileSecret = await getTurnstileSecret(locals);
+    const providedPass = request.headers.get("x-chat-pass") || getCookie(request, "chat_pass");
+
+    let isPassValid = false;
+    if (providedPass) {
+      isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret);
+    }
+
+    // If turnstileSecret is configured and pass is invalid, require human pass
+    if (turnstileSecret && !isPassValid && process.env.PLAYWRIGHT_E2E !== "1") {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: "pass_required",
+          requireTurnstile: true,
+          error: "Verification pass required to make chess moves. Please verify in Live Chat.",
+        }),
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
         }
       );
     }

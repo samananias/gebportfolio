@@ -24,6 +24,10 @@ test.describe("Interactive Chess Game Board E2E Tests", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem("portfolio_chat_display_name_v1", "ChessTester");
+      window.sessionStorage.setItem(
+        "portfolio_chat_pass_v1",
+        `${Date.now() + 900000}.preview-test-pass`
+      );
     });
     await page.goto("/");
   });

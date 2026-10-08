@@ -7,6 +7,7 @@ export interface VerifyTurnstileOptions {
   secret: string | null | undefined;
   clientIp?: string;
   expectedAction: string;
+  requestHostname?: string;
 }
 
 export interface VerifyTurnstileResult {
@@ -23,6 +24,18 @@ const PROD_ALLOWED_HOSTNAMES = new Set([
 const DEV_ALLOWED_HOSTNAMES = new Set([...PROD_ALLOWED_HOSTNAMES, "localhost", "127.0.0.1"]);
 
 /**
+ * Checks if a hostname belongs to a Cloudflare Pages or Workers preview deployment.
+ */
+export function isPreviewHostname(hostname?: string): boolean {
+  if (!hostname) return false;
+  const host = hostname.toLowerCase().split(":")[0];
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  if (host.endsWith(".pages.dev") && host !== "gebportfolio.pages.dev") return true;
+  if (host.endsWith(".workers.dev") && host !== "gebportfolio.workers.dev") return true;
+  return false;
+}
+
+/**
  * Resolves the TURNSTILE_SECRET from Workers environment, Astro locals, or process.env.
  */
 export async function getTurnstileSecret(locals?: App.Locals): Promise<string | null> {
@@ -30,8 +43,12 @@ export async function getTurnstileSecret(locals?: App.Locals): Promise<string | 
   const secret = (locals?.TURNSTILE_SECRET ||
     (globalThis as unknown as Record<string, unknown>)?.TURNSTILE_SECRET ||
     cfEnv?.TURNSTILE_SECRET ||
-    (typeof process !== "undefined" ? process.env?.TURNSTILE_SECRET : undefined)) as
-    string | undefined;
+    cfEnv?.TURNSTILE_SECRET_KEY ||
+    cfEnv?.CF_TURNSTILE_SECRET ||
+    cfEnv?.CLOUDFLARE_TURNSTILE_SECRET ||
+    (typeof process !== "undefined"
+      ? process.env?.TURNSTILE_SECRET || process.env?.TURNSTILE_SECRET_KEY
+      : undefined)) as string | undefined;
   return secret?.trim() || null;
 }
 
@@ -41,7 +58,7 @@ export async function getTurnstileSecret(locals?: App.Locals): Promise<string | 
 export async function verifyTurnstileToken(
   options: VerifyTurnstileOptions
 ): Promise<VerifyTurnstileResult> {
-  const { token, secret, clientIp, expectedAction } = options;
+  const { token, secret, clientIp, expectedAction, requestHostname } = options;
 
   // In test/local environments, permit requests if no secret is configured or during Playwright runs
   if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
@@ -50,20 +67,30 @@ export async function verifyTurnstileToken(
     }
   }
 
+  // Preview environment tolerance: if secret is not yet configured in Cloudflare Pages Preview variables
+  if (!secret) {
+    if (isPreviewHostname(requestHostname)) {
+      console.warn(
+        `[Turnstile Preview Notice]: TURNSTILE_SECRET is not configured for preview host '${requestHostname}'. Permitting verification for preview evaluation.`
+      );
+      return { success: true };
+    }
+
+    console.error(
+      "[Turnstile Error]: TURNSTILE_SECRET is not configured. Add it in Cloudflare Dashboard > Workers & Pages > gebportfolio > Settings > Variables and Secrets."
+    );
+    return {
+      success: false,
+      error:
+        "Security verification service is not configured. Please ensure TURNSTILE_SECRET is set in Cloudflare Variables and Secrets.",
+    };
+  }
+
   // Token shape validation (1 to 2048 non-whitespace characters)
   if (typeof token !== "string" || token.trim().length === 0 || token.length > 2048) {
     return {
       success: false,
       error: "Security verification token is missing or malformed.",
-    };
-  }
-
-  // If in production and secret is not configured, log error and block
-  if (!secret) {
-    console.error("[Turnstile Error]: TURNSTILE_SECRET is not configured in Workers environment.");
-    return {
-      success: false,
-      error: "Security verification service is temporarily unavailable.",
     };
   }
 
@@ -104,7 +131,13 @@ export async function verifyTurnstileToken(
       };
     }
 
-    if (result.action && result.action !== expectedAction) {
+    const isActionMatch =
+      !result.action ||
+      result.action === expectedAction ||
+      ((expectedAction === "chat" || expectedAction === "live") &&
+        (result.action === "chat" || result.action === "live"));
+
+    if (!isActionMatch) {
       console.warn(`[Turnstile Action Mismatch]: expected ${expectedAction}, got ${result.action}`);
       return {
         success: false,
@@ -166,9 +199,9 @@ export async function issueChatPass(
   const exp = Date.now() + ttlMs;
   const data = `${clientIp || "unknown"}:${exp}`;
 
-  // If in dev/test without real secret, produce an unforgeable test token
+  // If in dev/test/preview without real secret, produce a recognizable test token
   if (!secret) {
-    return `${exp}.dev-test-pass`;
+    return `${exp}.preview-test-pass`;
   }
 
   const key = await crypto.subtle.importKey(
@@ -207,9 +240,9 @@ export async function verifyChatPass(
     return false; // Expired
   }
 
-  // In test/local environments, permit dev test pass
-  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
-    if (!secret || sigBase64 === "dev-test-pass") {
+  // In test/local/preview environments, permit dev or preview test pass
+  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1" || !secret) {
+    if (!secret || sigBase64 === "dev-test-pass" || sigBase64 === "preview-test-pass") {
       return true;
     }
   }
