@@ -1,9 +1,9 @@
 // Single source of truth for the 3D Chess Stage Virtual Camera
 export const CAMERA = {
   perspective: 1200,
-  boardTilt: 58,
-  pieceTilt: -50,
-  origin: "50% 35%",
+  boardTilt: 48,
+  pieceTilt: -42,
+  origin: "50% 50%",
 } as const;
 
 // Visual style configuration decoupling piece visuals from game logic

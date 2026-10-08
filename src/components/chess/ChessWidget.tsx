@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Chess, type Square } from "chess.js";
 import { ChessBoard3D } from "./ChessBoard3D";
 import { PromotionModal } from "./PromotionModal";
@@ -38,7 +38,12 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
         const res = await fetch("/api/chess/state");
         if (res.ok) {
           const data = (await res.json()) as PublicGameState;
-          setGameState(data);
+          setGameState((prev) => {
+            if (prev && prev.version === data.version && prev.fen === data.fen) {
+              return prev;
+            }
+            return data;
+          });
           if (prevVersionRef.current !== data.version) {
             prevVersionRef.current = data.version;
             onGameStateChangeRef.current?.(data);
@@ -57,7 +62,16 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
       return () => clearInterval(interval);
     }, []);
 
-    if (isLoading || !gameState) {
+    // Parse FEN string with chess.js for legal move generation & check detection (memoized)
+    const chess = useMemo(() => {
+      return gameState ? new Chess(gameState.fen) : null;
+    }, [gameState?.fen]);
+
+    const board = useMemo(() => {
+      return chess ? chess.board() : [];
+    }, [chess]);
+
+    if (isLoading || !gameState || !chess) {
       return (
         <div className="flex h-full min-h-[300px] flex-col items-center justify-center p-6 text-center">
           <div className="bg-primary/10 border-primary/20 text-primary mb-3 flex size-12 animate-pulse items-center justify-center rounded-full border text-2xl">
@@ -67,10 +81,6 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
         </div>
       );
     }
-
-    // Parse FEN string with chess.js for legal move generation & check detection
-    const chess = new Chess(gameState.fen);
-    const board = chess.board();
 
     // Check detection & king square targeting
     const isCheck = chess.inCheck();

@@ -104,4 +104,27 @@ test.describe("Interactive Chess Game Board E2E Tests", () => {
     expect(result.data.ok).toBe(false);
     expect(result.data.reason).toBe("game_in_progress");
   });
+
+  test("should render 3D piece standees and maintain interactive selection", async ({ page }) => {
+    await openChessModal(page);
+
+    const yourSide = await page.evaluate(async () => {
+      const res = await fetch("/api/chess/state");
+      const data = await res.json();
+      return data.yourSide as "white" | "black";
+    });
+
+    const targetSquare = yourSide === "white" ? "e2" : "e7";
+    const pieceStandee = page.locator(`div[data-piece-square="${targetSquare}"]`);
+    await expect(pieceStandee).toBeVisible();
+
+    const squareBtn = page.locator(`button[title="${targetSquare}"]`);
+    await expect(squareBtn).toBeVisible();
+
+    await squareBtn.click();
+    await expect(squareBtn).toHaveClass(/outline/);
+
+    const labelBadge = page.locator(`text=Pawn on ${targetSquare}`);
+    await expect(labelBadge).toBeVisible();
+  });
 });

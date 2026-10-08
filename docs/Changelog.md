@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fixed Live Chat scroll displacement bug and implemented Smart Sticky Scroll with history preservation:
+  - **Identical Polling Bailout**: Added `areMessagesIdentical` shallow boundary and item equality check to `fetchMessages()` and `sendMessage()` in `src/components/chat/useChatSocket.ts`. Prevents assigning new array references when 5-second polling returns unchanged message history, eliminating wasteful re-renders.
+  - **User-Aware Scroll Preservation**: Replaced blind `scrollIntoView()` on every render with localized `container.scrollTo()` inside `MessageList` in `src/components/chat/ChatBox.tsx`. When a user scrolls up to read earlier messages, auto-scroll is paused and their scroll position is strictly preserved across all polling cycles.
+  - **Sticky Bottom & Initial Load**: Kept auto-scroll active when reading at the bottom (`scrollHeight - scrollTop - clientHeight <= 60px`) and when the user sends a message. Ensured initial chat load immediately positions to latest messages without sluggish drag animations.
+  - **"Latest Messages" Pill Indicator**: Added a floating pill button (`DoodleIcon name="arrow-down"`) that gracefully appears whenever the user scrolls up, enabling one-click smooth return to bottom.
+  - **E2E Test Coverage**: Added Playwright test in `tests/e2e/chat.spec.ts` verifying that scrolling up preserves scroll position across polling intervals and that the latest messages button correctly restores bottom alignment.
+
+- Optimized interactive chess game board performance (desktop & mobile) and resolved mobile 3D touch interaction:
+  - **GPU Texture Caching for Piece Standees**: Precomputed SVG data URLs (`PIECE_DATA_URLS`) with single-octave Perlin noise (`numOctaves="1"`) in `src/components/chess/ChessPiece.tsx` and switched piece rendering to `<img>` elements. This enables browsers to cache 12 raster textures in the GPU texture cache rather than recalculating 192 mathematical SVG noise filters on every frame in the 3D perspective context.
+  - **Memoization & Polling Bailout**: Memoized `Chess` instance and board matrices in `src/components/chess/ChessWidget.tsx` and `displayBoard` / depth-sorted `pieceObjects` in `src/components/chess/ChessBoard3D.tsx`. Added state version/FEN equality checks to short-circuit state updates when game state is unchanged, eliminating 3-second polling re-render churn.
+  - **Responsive 3D Camera & Geometry**: Adjusted camera tilt to 48° (from 58°), piece tilt to -42° (from -50°), and transform-origin to `50% 50%` in `src/components/chess/sceneConfig.ts`. This expands mobile square touch target height by ~32% and aligns vertical piece standees over their respective touch cells without sacrificing the woodcut extrusion aesthetic.
+  - **Zero-Latency Mobile Touch Interaction**: Added `onPointerDown` handling in `src/components/chess/ChessBoard3D.tsx` for immediate 0ms piece selection and move execution on mobile touch devices, guarded against synthetic click double-firing with a 500ms debounce, and guarded hover events (`onPointerEnter`/`onPointerLeave`) to ignore `pointerType === "touch"`.
+  - **CSS 3D Slab Optimization**: Streamlined 16-stop stacked box-shadow declarations to a 6-stop optimized extrusion with `will-change: transform` in `src/styles/global.css`.
+  - **Mobile 2D/3D Controls**: Added a dedicated mobile header toolbar to `src/components/chat/ChatBox.tsx` when the "Shared Chess" tab is active, providing intuitive 2D/3D toggle, team indicator, and game details modal access on small screens.
+  - **E2E Test Coverage**: Added comprehensive 3D piece standee selection and interactive move testing in `tests/e2e/chess.spec.ts` passing across Chromium, Firefox, WebKit, Mobile Chrome, and Mobile Safari.
+
 - Enforced immutable, single-use handle naming and streamlined chatbox input interface:
   - Removed the "Change" user button and handle resetting logic from the gate screen, ensuring visitors only name their user handle once upon initial onboarding.
   - Hardened `setUsername()` in `src/components/chat/useChatSocket.ts` so once established, a user's handle cannot be overwritten.

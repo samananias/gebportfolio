@@ -139,4 +139,74 @@ test.describe("Anonymous Real-Time Chatbox Onboarding & Verification", () => {
     const data = await res.json();
     expect(data.ok).toBe(true);
   });
+
+  test("should preserve scroll position when user scrolls up and show latest messages button", async ({
+    page,
+  }) => {
+    await page.route("**/api/chat/messages", async (route) => {
+      const messages = Array.from({ length: 25 }, (_, i) => ({
+        id: `msg_test_${i}`,
+        sender: i % 2 === 0 ? "TacticalTester" : "OpponentKnight",
+        avatar: "knight",
+        text: `Test message ${i + 1} with enough content to create vertical scroll space.`,
+        timestamp: Date.now() - (25 - i) * 60000,
+      }));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, messages }),
+      });
+    });
+
+    await page.evaluate(() => {
+      window.localStorage.setItem("portfolio_chat_display_name_v1", "TacticalTester");
+      window.sessionStorage.setItem(
+        "portfolio_chat_pass_v1",
+        `${Date.now() + 900000}.preview-test-pass`
+      );
+    });
+    await page.reload();
+
+    await openChatModal(page);
+
+    const dialog = page.getByRole("dialog", { name: "Real-time live chat room" });
+    await expect(dialog).toBeVisible();
+
+    const scrollContainer = dialog.locator(".custom-scrollbar").first();
+    await expect(scrollContainer).toBeVisible();
+
+    // Verify initial state is scrolled near bottom
+    await expect(async () => {
+      const scrollTop = await scrollContainer.evaluate((el) => el.scrollTop);
+      expect(scrollTop).toBeGreaterThan(0);
+    }).toPass();
+
+    // User scrolls UP to the top
+    await scrollContainer.evaluate((el) => {
+      el.scrollTop = 0;
+      el.dispatchEvent(new Event("scroll"));
+    });
+
+    // "Latest messages" floating button should appear
+    const latestBtn = page.getByRole("button", { name: "Scroll to latest messages" });
+    await expect(latestBtn).toBeVisible();
+
+    // Wait 6 seconds (exceeding the 5-second polling interval)
+    await page.waitForTimeout(6000);
+
+    // Scroll position should NOT have been jerked down back to bottom
+    const currentScrollTop = await scrollContainer.evaluate((el) => el.scrollTop);
+    expect(currentScrollTop).toBeLessThan(100);
+
+    // Clicking "Latest messages" button smoothly returns user to bottom
+    await latestBtn.click();
+    await expect(latestBtn).not.toBeVisible();
+
+    await expect(async () => {
+      const atBottom = await scrollContainer.evaluate(
+        (el) => el.scrollHeight - el.scrollTop - el.clientHeight <= 60
+      );
+      expect(atBottom).toBe(true);
+    }).toPass();
+  });
 });

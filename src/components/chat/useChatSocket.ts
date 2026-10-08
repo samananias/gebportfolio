@@ -176,6 +176,21 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
 
   const hasOnboarded = Boolean(displayName.trim() && displayName.trim().length >= 3);
 
+  function areMessagesIdentical(prev: ChatMessage[], next: ChatMessage[]): boolean {
+    if (prev === next) return true;
+    if (prev.length !== next.length) return false;
+    if (prev.length === 0) return true;
+    if (prev[prev.length - 1]?.id !== next[next.length - 1]?.id || prev[0]?.id !== next[0]?.id) {
+      return false;
+    }
+    for (let i = 0; i < prev.length; i++) {
+      if (prev[i].id !== next[i].id || prev[i].text !== next[i].text) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   // Fetch messages from the HTTP API
   const fetchMessages = useCallback(async () => {
     try {
@@ -186,7 +201,7 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
       }
       const data = await res.json();
       if (data && Array.isArray(data.messages)) {
-        setMessages(data.messages);
+        setMessages((prev) => (areMessagesIdentical(prev, data.messages) ? prev : data.messages));
         setIsConnected(true);
       }
     } catch (err) {
@@ -359,7 +374,7 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
             setHasActivePass(true);
           }
           if (data && Array.isArray(data.history)) {
-            setMessages(data.history);
+            setMessages((prev) => (areMessagesIdentical(prev, data.history) ? prev : data.history));
           }
           fetchMessages();
         })
