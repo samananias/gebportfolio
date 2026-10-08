@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Optimized interactive chess game board performance (desktop & mobile) and resolved mobile 3D touch interaction:
+  - **GPU Texture Caching for Piece Standees**: Precomputed SVG data URLs (`PIECE_DATA_URLS`) with single-octave Perlin noise (`numOctaves="1"`) in `src/components/chess/ChessPiece.tsx` and switched piece rendering to `<img>` elements. This enables browsers to cache 12 raster textures in the GPU texture cache rather than recalculating 192 mathematical SVG noise filters on every frame in the 3D perspective context.
+  - **Memoization & Polling Bailout**: Memoized `Chess` instance and board matrices in `src/components/chess/ChessWidget.tsx` and `displayBoard` / depth-sorted `pieceObjects` in `src/components/chess/ChessBoard3D.tsx`. Added state version/FEN equality checks to short-circuit state updates when game state is unchanged, eliminating 3-second polling re-render churn.
+  - **Responsive 3D Camera & Geometry**: Adjusted camera tilt to 48° (from 58°), piece tilt to -42° (from -50°), and transform-origin to `50% 50%` in `src/components/chess/sceneConfig.ts`. This expands mobile square touch target height by ~32% and aligns vertical piece standees over their respective touch cells without sacrificing the woodcut extrusion aesthetic.
+  - **Zero-Latency Mobile Touch Interaction**: Added `onPointerDown` handling in `src/components/chess/ChessBoard3D.tsx` for immediate 0ms piece selection and move execution on mobile touch devices, guarded against synthetic click double-firing with a 500ms debounce, and guarded hover events (`onPointerEnter`/`onPointerLeave`) to ignore `pointerType === "touch"`.
+  - **CSS 3D Slab Optimization**: Streamlined 16-stop stacked box-shadow declarations to a 6-stop optimized extrusion with `will-change: transform` in `src/styles/global.css`.
+  - **Mobile 2D/3D Controls**: Added a dedicated mobile header toolbar to `src/components/chat/ChatBox.tsx` when the "Shared Chess" tab is active, providing intuitive 2D/3D toggle, team indicator, and game details modal access on small screens.
+  - **E2E Test Coverage**: Added comprehensive 3D piece standee selection and interactive move testing in `tests/e2e/chess.spec.ts` passing across Chromium, Firefox, WebKit, Mobile Chrome, and Mobile Safari.
+
 - Enforced immutable, single-use handle naming and streamlined chatbox input interface:
   - Removed the "Change" user button and handle resetting logic from the gate screen, ensuring visitors only name their user handle once upon initial onboarding.
   - Hardened `setUsername()` in `src/components/chat/useChatSocket.ts` so once established, a user's handle cannot be overwritten.

@@ -441,26 +441,17 @@ html.theme-transition .theme-toggle .theme-icon {
   background-color: var(--chess-paper, #f2e8d5);
 }
 
-/* 3D Physical Wooden Block Extrusion & Ground Shadow */
+/* 3D Physical Wooden Block Extrusion & Ground Shadow (Optimized for 60 FPS mobile GPU compositing) */
 .board-3d-slab {
   transform-style: preserve-3d;
+  will-change: transform;
   box-shadow:
-    0 1px 0 var(--chess-ink),
     0 2px 0 var(--chess-ink),
-    0 3px 0 var(--chess-ink),
-    0 4px 0 var(--chess-ink),
     0 5px 0 var(--chess-ink),
-    0 6px 0 var(--chess-ink),
-    0 7px 0 var(--chess-ink),
     0 8px 0 var(--chess-ink),
-    0 9px 0 var(--chess-ink),
-    0 10px 0 var(--chess-ink),
-    0 11px 0 var(--chess-ink),
     0 12px 0 var(--chess-ink),
-    0 13px 0 var(--chess-ink),
-    0 14px 0 var(--chess-ink),
-    0 22px 28px -4px rgba(0, 0, 0, 0.45),
-    0 40px 50px -10px rgba(0, 0, 0, 0.35);
+    0 20px 26px -4px rgba(0, 0, 0, 0.45),
+    0 35px 45px -10px rgba(0, 0, 0, 0.35);
 }
 
 .board-2d-flat {

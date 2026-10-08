@@ -723,6 +723,36 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
               mobileTab === "chess" ? "flex" : "hidden md:flex"
             }`}
           >
+            {/* Mobile Controls Toolbar (visible only on mobile chess tab) */}
+            <div className="border-border-custom bg-surface/90 mb-2 flex w-full max-w-[390px] items-center justify-between rounded-xl border px-3 py-1.5 shadow-xs backdrop-blur-md md:hidden">
+              <div className="flex items-center gap-1.5">
+                <span className="bg-primary size-2 rounded-full" />
+                <span className="text-text font-mono text-xs font-semibold">
+                  Team {gameState?.yourSide?.toUpperCase() ?? "WHITE"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIs3D(!is3D)}
+                  title="Toggle between 3D Perspective and 2D Top-Down View"
+                  className="border-border-custom hover:bg-surface-subtle text-text flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-1 font-mono text-[11px] font-semibold transition-colors"
+                >
+                  <DoodleIcon name="camera" className="size-3.5" />
+                  {is3D ? "3D" : "2D"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDetailsOpen(true)}
+                  title="Game Details & History"
+                  aria-label="Open Game Details"
+                  className="hover:bg-surface-subtle text-text flex cursor-pointer items-center justify-center rounded-lg p-1 transition-colors"
+                >
+                  <MistakeIcon className="size-5 select-none" />
+                </button>
+              </div>
+            </div>
+
             <ChessWidget
               displayName={assignedName || displayName}
               is3D={is3D}
