@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fixed Live Chat scroll displacement bug and implemented Smart Sticky Scroll with history preservation:
+  - **Identical Polling Bailout**: Added `areMessagesIdentical` shallow boundary and item equality check to `fetchMessages()` and `sendMessage()` in `src/components/chat/useChatSocket.ts`. Prevents assigning new array references when 5-second polling returns unchanged message history, eliminating wasteful re-renders.
+  - **User-Aware Scroll Preservation**: Replaced blind `scrollIntoView()` on every render with localized `container.scrollTo()` inside `MessageList` in `src/components/chat/ChatBox.tsx`. When a user scrolls up to read earlier messages, auto-scroll is paused and their scroll position is strictly preserved across all polling cycles.
+  - **Sticky Bottom & Initial Load**: Kept auto-scroll active when reading at the bottom (`scrollHeight - scrollTop - clientHeight <= 60px`) and when the user sends a message. Ensured initial chat load immediately positions to latest messages without sluggish drag animations.
+  - **"Latest Messages" Pill Indicator**: Added a floating pill button (`DoodleIcon name="arrow-down"`) that gracefully appears whenever the user scrolls up, enabling one-click smooth return to bottom.
+  - **E2E Test Coverage**: Added Playwright test in `tests/e2e/chat.spec.ts` verifying that scrolling up preserves scroll position across polling intervals and that the latest messages button correctly restores bottom alignment.
+
 - Optimized interactive chess game board performance (desktop & mobile) and resolved mobile 3D touch interaction:
   - **GPU Texture Caching for Piece Standees**: Precomputed SVG data URLs (`PIECE_DATA_URLS`) with single-octave Perlin noise (`numOctaves="1"`) in `src/components/chess/ChessPiece.tsx` and switched piece rendering to `<img>` elements. This enables browsers to cache 12 raster textures in the GPU texture cache rather than recalculating 192 mathematical SVG noise filters on every frame in the 3D perspective context.
   - **Memoization & Polling Bailout**: Memoized `Chess` instance and board matrices in `src/components/chess/ChessWidget.tsx` and `displayBoard` / depth-sorted `pieceObjects` in `src/components/chess/ChessBoard3D.tsx`. Added state version/FEN equality checks to short-circuit state updates when game state is unchanged, eliminating 3-second polling re-render churn.

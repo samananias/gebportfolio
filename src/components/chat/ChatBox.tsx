@@ -180,11 +180,53 @@ interface MessageListProps {
 
 const MessageList: React.FC<MessageListProps> = React.memo(
   ({ messages, assignedName, displayName }) => {
-    const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const isAtBottomRef = useRef(true);
+    const [isAtBottom, setIsAtBottom] = useState(true);
+    const prevCountRef = useRef(0);
+
+    const handleScroll = useCallback(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      // Scrolled to within 60px of the bottom is considered "at bottom"
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 60;
+      isAtBottomRef.current = atBottom;
+      setIsAtBottom(atBottom);
+    }, []);
+
+    const scrollToBottom = useCallback((smooth = true) => {
+      const el = containerRef.current;
+      if (!el) return;
+      if (smooth) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
+      isAtBottomRef.current = true;
+      setIsAtBottom(true);
+    }, []);
 
     useEffect(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+      const el = containerRef.current;
+      if (!el || messages.length === 0) return;
+
+      const isInitial = prevCountRef.current === 0;
+      prevCountRef.current = messages.length;
+
+      const lastMsg = messages[messages.length - 1];
+      const isMe = lastMsg?.sender === (assignedName || displayName);
+
+      if (isInitial) {
+        // Immediate scroll to bottom on initial load (no sluggish drag animation)
+        el.scrollTop = el.scrollHeight;
+        isAtBottomRef.current = true;
+        setIsAtBottom(true);
+      } else if (isMe || isAtBottomRef.current) {
+        // Smooth scroll if user sent the message or was already reading at the bottom
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      }
+      // If user has scrolled up to read history, we do NOT scroll — preserving position!
+    }, [messages, assignedName, displayName]);
 
     if (messages.length === 0) {
       return (
@@ -203,61 +245,79 @@ const MessageList: React.FC<MessageListProps> = React.memo(
     }
 
     return (
-      <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1">
-        {messages.map((msg) => {
-          const isMe = msg.sender === (assignedName || displayName);
-          const isSystemMsg = msg.isSystem || msg.sender === "System";
-          const avatarSymbol = CHESS_SYMBOLS[msg.avatar] || "♞";
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={containerRef}
+          onScroll={handleScroll}
+          className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1"
+        >
+          {messages.map((msg) => {
+            const isMe = msg.sender === (assignedName || displayName);
+            const isSystemMsg = msg.isSystem || msg.sender === "System";
+            const avatarSymbol = CHESS_SYMBOLS[msg.avatar] || "♞";
 
-          if (isSystemMsg) {
-            return (
-              <div key={msg.id} className="my-2 text-center">
-                <span className="bg-surface-subtle border-border-custom/50 text-text-muted inline-block rounded-full border px-3 py-0.5 font-mono text-[10px] italic">
-                  {msg.text}
-                </span>
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={msg.id}
-              className={`flex items-start gap-2.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}
-            >
-              {/* Avatar Circle */}
-              <div
-                title={msg.sender}
-                className={`flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-bold shadow-xs select-none ${
-                  isMe
-                    ? "bg-primary border-primary text-white"
-                    : "bg-surface border-border-custom text-primary"
-                }`}
-              >
-                {avatarSymbol}
-              </div>
-
-              {/* Message Content & Metadata */}
-              <div className={`flex max-w-[82%] flex-col ${isMe ? "items-end" : "items-start"}`}>
-                <div className="text-text-muted mb-1 flex items-center gap-1.5 font-mono text-[10px]">
-                  <span className="font-bold">{msg.sender}</span>
-                  <span>·</span>
-                  <span>{formatRelativeTime(msg.timestamp)}</span>
+            if (isSystemMsg) {
+              return (
+                <div key={msg.id} className="my-2 text-center">
+                  <span className="bg-surface-subtle border-border-custom/50 text-text-muted inline-block rounded-full border px-3 py-0.5 font-mono text-[10px] italic">
+                    {msg.text}
+                  </span>
                 </div>
+              );
+            }
 
+            return (
+              <div
+                key={msg.id}
+                className={`flex items-start gap-2.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}
+              >
+                {/* Avatar Circle */}
                 <div
-                  className={`rounded-2xl border px-3.5 py-2 font-sans text-xs leading-relaxed break-words shadow-sm ${
+                  title={msg.sender}
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-bold shadow-xs select-none ${
                     isMe
-                      ? "bg-primary border-primary rounded-tr-xs text-white"
-                      : "bg-surface-subtle/90 border-border-custom/60 text-text rounded-tl-xs"
+                      ? "bg-primary border-primary text-white"
+                      : "bg-surface border-border-custom text-primary"
                   }`}
                 >
-                  {msg.text}
+                  {avatarSymbol}
+                </div>
+
+                {/* Message Content & Metadata */}
+                <div className={`flex max-w-[82%] flex-col ${isMe ? "items-end" : "items-start"}`}>
+                  <div className="text-text-muted mb-1 flex items-center gap-1.5 font-mono text-[10px]">
+                    <span className="font-bold">{msg.sender}</span>
+                    <span>·</span>
+                    <span>{formatRelativeTime(msg.timestamp)}</span>
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border px-3.5 py-2 font-sans text-xs leading-relaxed break-words shadow-sm ${
+                      isMe
+                        ? "bg-primary border-primary rounded-tr-xs text-white"
+                        : "bg-surface-subtle/90 border-border-custom/60 text-text rounded-tl-xs"
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-        <div ref={messagesEndRef} />
+            );
+          })}
+        </div>
+
+        {/* Floating pill button when scrolled up */}
+        {!isAtBottom && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom(true)}
+            aria-label="Scroll to latest messages"
+            className="border-border-custom bg-surface text-text hover:bg-surface-subtle absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-[11px] font-semibold shadow-md transition-all active:scale-95"
+          >
+            <DoodleIcon name="arrow-down" className="text-primary size-3" />
+            <span>Latest messages</span>
+          </button>
+        )}
       </div>
     );
   }
