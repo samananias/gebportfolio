@@ -14,6 +14,7 @@ Index of architectural decision records (ADRs) for the project.
 - [0008 - ID Photo Studio: Client-Side Removal with Thin Workers Backend](0008-crop-thin-backend-client-removal.md) — Proposed (2026-09-10)
 - [0009 - Suspend Keystatic Visual Editor](0009-suspend-keystatic-visual-editor.md) — Approved (2026-09-19)
 - [0010 - Resolve Cloudflare Bindings Lazily via cloudflare:workers](0010-resolve-cloudflare-bindings-lazily.md) — Approved (2026-09-19)
+- [0011 - Anti-Bot Rate Limiting, Origin Verification, and Game Protection](0011-anti-bot-rate-limiting-and-game-protection.md) — Approved (2026-10-08)
 
 ## Status Meanings
 

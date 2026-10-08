@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getWorkersEnv } from "../../lib/bindings";
+import { verifyTurnstileToken, getTurnstileSecret } from "../../lib/turnstile";
 
 export const prerender = false;
 
@@ -187,8 +188,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return jsonError("A message is required.");
     }
 
-    const kv = await getBinding("CHAT_KV", locals);
     const ip = request.headers.get("cf-connecting-ip") ?? "";
+
+    // Turnstile bot verification (prompt.md: gate, don't replace)
+    const turnstileSecret = await getTurnstileSecret(locals);
+    const turnstileResult = await verifyTurnstileToken({
+      token: body["cf-turnstile-response"],
+      secret: turnstileSecret,
+      clientIp: ip,
+      expectedAction: "contact",
+    });
+
+    if (!turnstileResult.success) {
+      return jsonError(
+        turnstileResult.error || "Security verification failed. Please try again.",
+        403
+      );
+    }
+
+    const kv = await getBinding("CHAT_KV", locals);
     // Rate limiting is production-only: local dev/E2E shares one miniflare IP,
     // so the per-IP bucket would block legitimate testing for an hour.
     if (import.meta.env.PROD && (await isRateLimited(kv, ip))) {

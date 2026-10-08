@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Enforced immutable, single-use handle naming and streamlined chatbox input interface:
+  - Removed the "Change" user button and handle resetting logic from the gate screen, ensuring visitors only name their user handle once upon initial onboarding.
+  - Hardened `setUsername()` in `src/components/chat/useChatSocket.ts` so once established, a user's handle cannot be overwritten.
+  - Removed the "15m Pass Active" badge from the chatbox input footer (`ChatInputForm` in `ChatBox.tsx`), providing a clean "chatting as <handle>" presence display without extraneous pass timers.
+  - Refined modal verification microcopy to reference arena security access rather than 15-minute countdowns.
+- Redesigned the Live Arena onboarding and security verification gate modals (`ChatBox.tsx`) following the Woodcut & Engraving visual theme:
+  - Replaced generic glassy floating dialog with a tactile, opaque `border-2 border-border-custom bg-surface` card carrying the brand's structural offset shadow (`shadow-[4px_4px_0_var(--color-border)]`).
+  - Added a recessed **Player Callsign Badge** displaying active handle identity with a woodcut user icon.
+  - Enclosed the Turnstile challenge in a dedicated framed inspection plate (`border border-border-custom/80 bg-surface-subtle/40`) with an explicit status label.
+  - Applied tactile framed close buttons and structured heraldry crest icon containers, eliminating raw unicode emoji in UI markup.
+- Fixed React hook ordering crash (`Minified React error #310` / "Rendered more hooks than during previous render") in `src/components/chat/ChatBox.tsx` by declaring all `useCallback` verification handlers unconditionally before the `if (!isOpen) return null;` early return statement.
+- Added wildcard suffix matching for Cloudflare Pages (`*.pages.dev`) and Workers (`*.workers.dev`) preview hostnames to `isOriginAllowed()` in `src/lib/rateLimit.ts` to ensure branch preview deployments pass request origin checks.
+- Implemented multi-layer anti-bot defenses and edge rate limiting across live chat and chess endpoints (ADR 0011):
+  - Created `src/lib/rateLimit.ts` providing zero-overhead in-memory edge isolate rate limiting, origin/referer verification against third-party bot scripts, and server-side sender moderation.
+  - Hardened `POST /api/chat/send` with strict IP rate limiting (5 msgs/min with a 3s cooldown), honeypot traps (`website`, `_hp`), and server-side blacklist for reserved and AI model tokens (`anthropic`, `gpt`, `bot`, `admin`).
+  - Hardened `POST /api/chess/move` with move rate limiting (12 moves/min with a 2.5s cooldown) and origin validation.
+  - Hardened `POST /api/chess/reset` to forbid manual resets during active matches (`game_in_progress` validation via `turn-arbiter`), restricting resets exclusively to concluded games (checkmate, draw, stalemate) with rate limiting.
+  - Integrated Cloudflare Turnstile CAPTCHA verification (`0x4AAAAAAFRF21R_W1pBeMMF`) following the Turnstile Spin specification across Contact Form (`action: "contact"`), Live Chat, and Shared Chess:
+    - Designed the **Live Modal Entry Gate** architecture: removed embedded CAPTCHA widgets from the chatbox input bar, gating entry on modal open via initial handle onboarding and returning verification cards.
+    - Implemented a unified 15-Minute HMAC-SHA256 session pass issued by `POST /api/chat/verify` that simultaneously unlocks Live Chat and Shared Chess moves (`POST /api/chess/move`).
+    - Added Cloudflare Pages preview deployment tolerance (`isPreviewHostname()`) and graceful fallbacks for secret resolution (`TURNSTILE_SECRET`, `TURNSTILE_SECRET_KEY`, `CF_TURNSTILE_SECRET`).
+    - Configured conditional `Secure` cookie attributes for chess session state and reset endpoints to prevent local test cookie rejection in WebKit/Safari engines.
+  - Authored comprehensive documentation in `docs/engineering/SecurityAndBotDefense.md` and ADR `docs/decisions/0011-anti-bot-rate-limiting-and-game-protection.md`.
+
 - Fixed flaky Playwright E2E test `should interpolate through intermediate positions on a fast multi-slide jump` in `tests/e2e/core-mindset-carousel.spec.ts`. Separated the slide 1 parking assertion into its own settled poll before triggering the jump to slide 5, captured intermediate eased transform values directly within browser `requestAnimationFrame` cycles, and explicitly dispatched `scroll` events to prevent synthetic `scrollTo` event coalescing and retry timing loops under throttled CI environments.
 
 - Refactored `AGENTS.md`, `CLAUDE.md`, and `.agents/AGENTS.md` following the

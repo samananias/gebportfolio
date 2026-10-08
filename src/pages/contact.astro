@@ -236,6 +236,18 @@ const inputClass =
                   <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
                 </div>
 
+                <!-- Cloudflare Turnstile Verification -->
+                <div class="my-2 min-h-[65px]">
+                  <div
+                    class="cf-turnstile"
+                    data-sitekey="0x4AAAAAAFRF21R_W1pBeMMF"
+                    data-action="contact"
+                    data-theme="auto"
+                    data-size="flexible"
+                  >
+                  </div>
+                </div>
+
                 <!-- Status region -->
                 <p
                   id="contact-status"
@@ -409,11 +421,22 @@ const inputClass =
         return;
       }
 
+      const turnstileInput = form.elements.namedItem(
+        "cf-turnstile-response"
+      ) as HTMLInputElement | null;
+      const turnstileToken =
+        turnstileInput?.value ||
+        (
+          window as unknown as { turnstile?: { getResponse?: () => string } }
+        ).turnstile?.getResponse?.() ||
+        "";
+
       const payload = {
         name: nameField?.value ?? "",
         email: emailField?.value ?? "",
         message: messageField?.value ?? "",
         website: (form.elements.namedItem("website") as HTMLInputElement)?.value ?? "",
+        "cf-turnstile-response": turnstileToken,
       };
 
       setSending(true);
@@ -440,10 +463,12 @@ const inputClass =
           result.error ||
             "The message could not be sent right now. Please try again, or email me directly."
         );
+        (window as unknown as { turnstile?: { reset?: () => void } }).turnstile?.reset?.();
       } catch {
         showError(
           "The network dropped that move. Check your connection and try again, or email me directly."
         );
+        (window as unknown as { turnstile?: { reset?: () => void } }).turnstile?.reset?.();
       } finally {
         setSending(false);
       }
@@ -458,6 +483,7 @@ const inputClass =
         counter.textContent = "0";
       }
       clearError();
+      (window as unknown as { turnstile?: { reset?: () => void } }).turnstile?.reset?.();
       successPanel.hidden = true;
       formPanel.hidden = false;
       nameField?.focus();

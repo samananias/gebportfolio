@@ -24,6 +24,10 @@ test.describe("Interactive Chess Game Board E2E Tests", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem("portfolio_chat_display_name_v1", "ChessTester");
+      window.sessionStorage.setItem(
+        "portfolio_chat_pass_v1",
+        `${Date.now() + 900000}.preview-test-pass`
+      );
     });
     await page.goto("/");
   });
@@ -79,5 +83,25 @@ test.describe("Interactive Chess Game Board E2E Tests", () => {
     const archiveData = await archiveRes.json();
     expect(archiveData.ok).toBe(true);
     expect(Array.isArray(archiveData.archives)).toBe(true);
+  });
+
+  test("should reject manual reset endpoint while match is in progress", async ({ page }) => {
+    // Open home page to establish session cookie
+    await page.goto("/");
+
+    const result = await page.evaluate(async () => {
+      // Initialize chess session cookie
+      await fetch("/api/chess/state");
+      const res = await fetch("/api/chess/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json().catch(() => ({}));
+      return { status: res.status, data };
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.data.ok).toBe(false);
+    expect(result.data.reason).toBe("game_in_progress");
   });
 });

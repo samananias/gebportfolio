@@ -159,9 +159,14 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
       setIsSubmitting(true);
 
       try {
+        const activePass =
+          typeof window !== "undefined" ? sessionStorage.getItem("portfolio_chat_pass_v1") : null;
         const res = await fetch("/api/chess/move", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(activePass ? { "x-chat-pass": activePass } : {}),
+          },
           body: JSON.stringify({
             move: sanMove,
             version: gameState.version,
@@ -189,7 +194,10 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
             chessAudio.playMove();
           }
         } else {
-          if (data.reason === "superseded") {
+          if (data.requireTurnstile) {
+            window.dispatchEvent(new CustomEvent("portfolio-chat-require-pass"));
+            showToast("Session pass expired. Please verify to continue playing.");
+          } else if (data.reason === "superseded") {
             showToast("A teammate moved first!");
             if (data.publicView) {
               setGameState(data.publicView);
@@ -199,8 +207,10 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
             showToast("It's not your team's turn right now.");
           } else if (data.reason === "illegal_move") {
             showToast("Illegal move for this position.");
+          } else if (data.reason === "rate_limited") {
+            showToast("Slow down! Please wait a moment between moves.");
           } else {
-            showToast(`Rejected: ${data.reason}`);
+            showToast(`Rejected: ${data.error || data.reason}`);
           }
         }
       } catch {
@@ -223,7 +233,7 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
           setPendingPromotion(null);
           showToast(`New Match Started! You are Team ${data.state.yourSide.toUpperCase()}`);
         } else {
-          showToast(`Reset failed: ${data.reason}`);
+          showToast(`Reset failed: ${data.error || data.reason}`);
         }
       } catch {
         showToast("Failed to connect to game server.");

@@ -51,16 +51,20 @@ test.describe("Anonymous Real-Time Chatbox Onboarding & Verification", () => {
 
     // After onboarding, main message input should be visible
     const messageInput = page.getByPlaceholder("say something...");
-    await expect(messageInput).toBeVisible();
+    await expect(messageInput).toBeVisible({ timeout: 10_000 });
   });
 
   test("should persist username in localStorage and bypass onboarding on reload", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
+    await page.evaluate(() => {
       window.localStorage.setItem("portfolio_chat_display_name_v1", "TacticalTester");
+      window.sessionStorage.setItem(
+        "portfolio_chat_pass_v1",
+        `${Date.now() + 900000}.preview-test-pass`
+      );
     });
-    await page.goto("/");
+    await page.reload();
 
     await openChatModal(page);
 
@@ -105,5 +109,34 @@ test.describe("Anonymous Real-Time Chatbox Onboarding & Verification", () => {
       await closeBtn.click();
       await expect(dialog).not.toBeVisible();
     }).toPass({ timeout: 5000 });
+  });
+
+  test("should reject reserved bot sender names on /api/chat/send", async ({ request }) => {
+    const res = await request.post("/api/chat/send", {
+      data: {
+        sender: "AnthropicBot",
+        text: "Hello from a simulated bot",
+        avatar: "knight",
+      },
+    });
+
+    expect(res.status()).toBe(400);
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.error).toContain("reserved");
+  });
+
+  test("should silently drop submissions that fill honeypot fields", async ({ request }) => {
+    const res = await request.post("/api/chat/send", {
+      data: {
+        sender: "RealUser",
+        text: "Spam content",
+        website: "http://spamsite.com",
+      },
+    });
+
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
   });
 });

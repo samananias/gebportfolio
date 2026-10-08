@@ -41,5 +41,7 @@ declare namespace App {
     DB?: D1Binding;
     /** Brevo transactional email secret (dashboard secret, not wrangler). */
     BREVO_API_KEY?: string;
+    /** Cloudflare Turnstile verification secret (dashboard secret, not wrangler). */
+    TURNSTILE_SECRET?: string;
   }
 }

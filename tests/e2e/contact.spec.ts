@@ -80,4 +80,13 @@ test.describe("Contact Form Submission Flow", () => {
     );
     await expect(page.getByRole("button", { name: "Send Message" })).toBeVisible();
   });
+
+  test("should render the Turnstile verification container with correct sitekey and action", async ({
+    page,
+  }) => {
+    const turnstileContainer = page.locator(".cf-turnstile");
+    await expect(turnstileContainer).toBeAttached();
+    await expect(turnstileContainer).toHaveAttribute("data-sitekey", "0x4AAAAAAFRF21R_W1pBeMMF");
+    await expect(turnstileContainer).toHaveAttribute("data-action", "contact");
+  });
 });
