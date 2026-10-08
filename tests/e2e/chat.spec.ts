@@ -10,15 +10,6 @@ async function openChatModal(page: Page) {
         true;
       window.dispatchEvent(new CustomEvent("open-portfolio-chat"));
     });
-    const isOpen = await dialog.isVisible().catch(() => false);
-    if (!isOpen) {
-      const trigger = page
-        .locator("aside button, #mobile-menu button", { hasText: "Live Chat" })
-        .first();
-      if (await trigger.isVisible().catch(() => false)) {
-        await trigger.click().catch(() => {});
-      }
-    }
     await expect(dialog).toBeVisible();
   }).toPass({ timeout: 15_000 });
 }

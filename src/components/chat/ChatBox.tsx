@@ -114,6 +114,12 @@ const TurnstileGateWidget: React.FC<TurnstileGateWidgetProps> = React.memo(
     const containerRef = useRef<HTMLDivElement | null>(null);
     const widgetIdRef = useRef<string | null>(null);
 
+    const onVerifyRef = useRef(onVerify);
+    onVerifyRef.current = onVerify;
+
+    const onExpireRef = useRef(onExpire);
+    onExpireRef.current = onExpire;
+
     useEffect(() => {
       let isMounted = true;
       let pollCount = 0;
@@ -129,13 +135,13 @@ const TurnstileGateWidget: React.FC<TurnstileGateWidgetProps> = React.memo(
               theme: "auto",
               size: "flexible",
               callback: (token: string) => {
-                if (isMounted) onVerify(token);
+                if (isMounted) onVerifyRef.current(token);
               },
               "expired-callback": () => {
-                if (isMounted) onExpire?.();
+                if (isMounted) onExpireRef.current?.();
               },
               "error-callback": () => {
-                if (isMounted) onExpire?.();
+                if (isMounted) onExpireRef.current?.();
               },
             });
             widgetIdRef.current = id;
@@ -150,7 +156,7 @@ const TurnstileGateWidget: React.FC<TurnstileGateWidgetProps> = React.memo(
           setTimeout(renderWidget, 200);
         } else if (typeof window !== "undefined" && !window.turnstile) {
           // Fallback if Turnstile script is blocked or in automated test environments
-          onVerify("dummy-test-token");
+          onVerifyRef.current("dummy-test-token");
         }
       };
 
@@ -167,7 +173,7 @@ const TurnstileGateWidget: React.FC<TurnstileGateWidgetProps> = React.memo(
           widgetIdRef.current = null;
         }
       };
-    }, [action, onVerify, onExpire]);
+    }, [action]);
 
     return (
       <div className="flex min-h-[65px] items-center justify-center overflow-hidden rounded-lg">
@@ -381,13 +387,24 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
     setValidationError(null);
   };
 
-  const handleGateVerify = async (token: string) => {
-    if (!token || isVerifying) return;
-    setIsVerifying(true);
-    setValidationError(null);
-    await verifyAndActivatePass(token, displayName);
-    setIsVerifying(false);
-  };
+  const handleOnboardingVerify = useCallback((token: string) => {
+    setOnboardingToken(token);
+  }, []);
+
+  const handleOnboardingExpire = useCallback(() => {
+    setOnboardingToken("");
+  }, []);
+
+  const handleGateVerify = useCallback(
+    async (token: string) => {
+      if (!token || isVerifying) return;
+      setIsVerifying(true);
+      setValidationError(null);
+      await verifyAndActivatePass(token, displayName);
+      setIsVerifying(false);
+    },
+    [isVerifying, verifyAndActivatePass, displayName]
+  );
 
   const activeError = validationError || error;
 
@@ -475,8 +492,8 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
 
             <div className="my-2">
               <TurnstileGateWidget
-                onVerify={(tok) => setOnboardingToken(tok)}
-                onExpire={() => setOnboardingToken("")}
+                onVerify={handleOnboardingVerify}
+                onExpire={handleOnboardingExpire}
               />
             </div>
 
@@ -544,19 +561,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
               Activating 15-minute pass...
             </p>
           )}
-
-          <div className="mt-4 flex items-center justify-center">
-            <button
-              type="button"
-              onClick={() => {
-                localStorage.removeItem("portfolio_chat_display_name_v1");
-                window.location.reload();
-              }}
-              className="text-text-muted hover:text-text cursor-pointer font-mono text-xs underline"
-            >
-              Switch handle / username
-            </button>
-          </div>
         </div>
       ) : (
         /* 3. Onboarded Dual Panel Layout (Active 15-minute pass) */
