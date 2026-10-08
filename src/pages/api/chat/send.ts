@@ -6,7 +6,13 @@ import {
   isReservedSender,
   checkRateLimit,
 } from "../../../lib/rateLimit";
-import { verifyTurnstileToken, getTurnstileSecret } from "../../../lib/turnstile";
+import {
+  verifyTurnstileToken,
+  getTurnstileSecret,
+  verifyChatPass,
+  issueChatPass,
+  getCookie,
+} from "../../../lib/turnstile";
 
 export const prerender = false;
 
@@ -74,27 +80,47 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const clientIp = getClientIp(request);
-
-    // 5. Turnstile bot verification (prompt.md: gate, don't replace)
     const turnstileSecret = await getTurnstileSecret(locals);
-    const turnstileResult = await verifyTurnstileToken({
-      token: body["cf-turnstile-response"],
-      secret: turnstileSecret,
-      clientIp,
-      expectedAction: "chat",
-    });
 
-    if (!turnstileResult.success) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: turnstileResult.error || "Security verification failed. Please try again.",
-        }),
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+    // 5. 15-Minute Human Chat Pass & Turnstile Bot Verification
+    const providedPass =
+      (typeof body.chatPass === "string" && body.chatPass) ||
+      request.headers.get("x-chat-pass") ||
+      getCookie(request, "chat_pass");
+
+    let isPassValid = false;
+    if (providedPass) {
+      isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret);
+    }
+
+    let activePass = isPassValid ? providedPass : null;
+
+    if (!isPassValid) {
+      // Pass is absent or expired: require Turnstile challenge token
+      const turnstileResult = await verifyTurnstileToken({
+        token: body["cf-turnstile-response"],
+        secret: turnstileSecret,
+        clientIp,
+        expectedAction: "chat",
+      });
+
+      if (!turnstileResult.success) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            requireTurnstile: true,
+            error:
+              turnstileResult.error || "Security verification required. Please verify to chat.",
+          }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      // Turnstile verified successfully! Issue fresh 15-minute pass
+      activePass = await issueChatPass(clientIp, turnstileSecret);
     }
 
     // 6. Rate limiting: 5 messages per 60s, 3s minimum cooldown per IP
@@ -132,16 +158,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const updatedHistory = await addChatMessage(locals, newMessage);
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "CDN-Cache-Control": "no-store",
+      "Cloudflare-CDN-Cache-Control": "no-store",
+    };
+
+    if (activePass) {
+      headers["Set-Cookie"] =
+        `chat_pass=${activePass}; Path=/; Max-Age=900; SameSite=Lax; Secure; HttpOnly`;
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, message: newMessage, history: updatedHistory }),
+      JSON.stringify({
+        ok: true,
+        message: newMessage,
+        history: updatedHistory,
+        chatPass: activePass,
+      }),
       {
         status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "CDN-Cache-Control": "no-store",
-          "Cloudflare-CDN-Cache-Control": "no-store",
-        },
+        headers,
       }
     );
   } catch {

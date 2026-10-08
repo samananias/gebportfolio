@@ -83,13 +83,14 @@ Cloudflare Turnstile bot deterrence is integrated end-to-end across both public 
      - Handler contract: "gate, don't replace" — `POST /api/contact` verifies token against `https://challenges.cloudflare.com/turnstile/v0/siteverify` before calling Brevo delivery.
    - **Live Chat** (`ChatBox` & `POST /api/chat/send`):
      - Action: `chat`.
-     - Container rendered dynamically in `ChatInputForm` (`ChatBox.tsx`) via `window.turnstile.render()`.
-     - Token lifecycle: token passed with `sendMessage()`; `window.turnstile.reset(widgetId)` immediately cycles a fresh challenge for the subsequent message.
-     - Handler contract: `POST /api/chat/send` validates `action === "chat"`, rejects automated HTTP POST bots with HTTP 403, and preserves in-memory edge rate limiting.
+     - **15-Minute Human Chat Pass**: On initial join or when the pass expires, the Turnstile widget renders in `ChatInputForm`. Upon verification, the server issues an HMAC-SHA256 signed `chat_pass` bound to `clientIp` and an unforgeable 15-minute expiration timestamp (`issueChatPass()`).
+     - Session experience: During the 15-minute window, human visitors chat seamlessly with zero CAPTCHA interruptions. The Turnstile challenge box remains unmounted and an active session badge is displayed.
+     - Auto-Renewal: When the 15-minute pass elapses, the server returns `requireTurnstile: true`, prompting a 1-second Turnstile re-verification to issue a fresh pass.
+     - Bot Defense: Automated scripts lacking a browser cannot obtain a pass. An attacker who manually extracts a cookie is restricted by the IP-bound HMAC signature, strictly throttled to 5 msgs/min (3s cooldown), and terminated at minute 15.
 
 3. **Validation & Dev Bypassing**:
    - In development and Playwright E2E suites (`!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1"`), requests without secret or with dummy tokens succeed to prevent CI flakiness and maintain zero-latency development workflows.
-   - In production, missing secrets or invalid tokens are strictly blocked at the boundary.
+   - In production, missing secrets or invalid tokens are strictly blocked at the boundary. Cloudflare Pages preview deployment subdomains (`*.pages.dev`, `*.gebportfolio.pages.dev`) are verified as trusted hosts.
 
 ---
 

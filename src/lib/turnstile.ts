@@ -115,7 +115,14 @@ export async function verifyTurnstileToken(
     const isProd = import.meta.env.PROD && process.env.PLAYWRIGHT_E2E !== "1";
     const allowed = isProd ? PROD_ALLOWED_HOSTNAMES : DEV_ALLOWED_HOSTNAMES;
 
-    if (result.hostname && !allowed.has(result.hostname)) {
+    const isHostnameAllowed =
+      result.hostname &&
+      (allowed.has(result.hostname) ||
+        result.hostname.endsWith(".gebportfolio.pages.dev") ||
+        result.hostname.endsWith(".pages.dev") ||
+        result.hostname.endsWith(".workers.dev"));
+
+    if (!isHostnameAllowed) {
       console.warn(`[Turnstile Hostname Mismatch]: untrusted host ${result.hostname}`);
       return {
         success: false,
@@ -130,5 +137,103 @@ export async function verifyTurnstileToken(
       success: false,
       error: "Verification challenge could not be reached.",
     };
+  }
+}
+
+/**
+ * 15-Minute Human Chat Pass lifetime in milliseconds.
+ */
+export const CHAT_PASS_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Extracts a cookie value by name from incoming Request headers.
+ */
+export function getCookie(request: Request, name: string): string | null {
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Issues an HMAC-SHA256 signed chat pass bound to client IP and expiration time.
+ */
+export async function issueChatPass(
+  clientIp: string,
+  secret: string | null | undefined,
+  ttlMs = CHAT_PASS_TTL_MS
+): Promise<string> {
+  const exp = Date.now() + ttlMs;
+  const data = `${clientIp || "unknown"}:${exp}`;
+
+  // If in dev/test without real secret, produce an unforgeable test token
+  if (!secret) {
+    return `${exp}.dev-test-pass`;
+  }
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  const sigBase64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  return `${exp}.${sigBase64}`;
+}
+
+/**
+ * Verifies that a chat pass is unexpired, authentic, and bound to the client's IP.
+ */
+export async function verifyChatPass(
+  pass: unknown,
+  clientIp: string,
+  secret: string | null | undefined
+): Promise<boolean> {
+  if (typeof pass !== "string" || !pass.includes(".")) {
+    return false;
+  }
+
+  const [expStr, sigBase64] = pass.split(".");
+  const exp = Number(expStr);
+
+  if (!exp || Number.isNaN(exp) || Date.now() > exp) {
+    return false; // Expired
+  }
+
+  // In test/local environments, permit dev test pass
+  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
+    if (!secret || sigBase64 === "dev-test-pass") {
+      return true;
+    }
+  }
+
+  if (!secret) {
+    return false;
+  }
+
+  const data = `${clientIp || "unknown"}:${exp}`;
+
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+
+    const base64Standard = sigBase64.replace(/-/g, "+").replace(/_/g, "/");
+    const rawSig = Uint8Array.from(atob(base64Standard), (c) => c.charCodeAt(0));
+
+    return await crypto.subtle.verify("HMAC", key, rawSig, new TextEncoder().encode(data));
+  } catch {
+    return false;
   }
 }

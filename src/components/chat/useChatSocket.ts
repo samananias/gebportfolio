@@ -23,6 +23,7 @@ export interface UseChatSocketReturn {
   isConnected: boolean;
   isConnecting: boolean;
   hasOnboarded: boolean;
+  hasActivePass: boolean;
   error: string | null;
   typingUsers: string[];
   sendMessage: (text: string, turnstileToken?: string) => boolean;
@@ -33,6 +34,42 @@ export interface UseChatSocketReturn {
 
 const DISPLAY_NAME_KEY = "portfolio_chat_display_name_v1";
 const SESSION_STORAGE_KEY = "portfolio_chat_session_token_v1";
+const CHAT_PASS_STORAGE_KEY = "portfolio_chat_pass_v1";
+
+function getStoredChatPass(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(CHAT_PASS_STORAGE_KEY);
+    if (!raw) return null;
+    const [expStr] = raw.split(".");
+    const exp = Number(expStr);
+    if (!exp || Date.now() > exp) {
+      sessionStorage.removeItem(CHAT_PASS_STORAGE_KEY);
+      return null;
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+function storeChatPass(pass: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(CHAT_PASS_STORAGE_KEY, pass);
+  } catch {
+    // SessionStorage write ignored
+  }
+}
+
+function clearStoredChatPass(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(CHAT_PASS_STORAGE_KEY);
+  } catch {
+    // SessionStorage delete ignored
+  }
+}
 
 /** Polling interval in milliseconds. */
 const POLL_INTERVAL_MS = 5000;
@@ -120,6 +157,7 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
   const [displayName, setDisplayNameState] = useState<string>(getInitialDisplayName);
   const [avatar, setAvatar] = useState<string>("knight");
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [hasActivePass, setHasActivePass] = useState<boolean>(() => Boolean(getStoredChatPass()));
   const [error, setError] = useState<string | null>(null);
 
   const displayNameRef = useRef<string>(displayName);
@@ -226,23 +264,37 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
       };
       setMessages((prev) => [...prev.slice(-49), optimisticMsg]);
 
+      const activePass = getStoredChatPass();
+
       // POST to server
       fetch("/api/chat/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(activePass ? { "x-chat-pass": activePass } : {}),
+        },
         body: JSON.stringify({
           sender: currentName,
           avatar,
           text: trimmed,
+          chatPass: activePass || undefined,
           "cf-turnstile-response": turnstileToken || "",
         }),
       })
         .then(async (res) => {
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
+            if (data.requireTurnstile) {
+              clearStoredChatPass();
+              setHasActivePass(false);
+            }
             setError(data.error || "Failed to send message.");
             fetchMessages();
             return;
+          }
+          if (data && data.chatPass) {
+            storeChatPass(data.chatPass);
+            setHasActivePass(true);
           }
           if (data && Array.isArray(data.history)) {
             setMessages(data.history);
@@ -276,6 +328,7 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
     isConnected,
     isConnecting: false,
     hasOnboarded,
+    hasActivePass,
     error,
     typingUsers: [],
     sendMessage,

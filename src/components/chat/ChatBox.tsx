@@ -35,136 +35,164 @@ function formatRelativeTime(timestamp: number): string {
 interface ChatInputFormProps {
   onSend: (text: string, turnstileToken?: string) => void;
   assignedName: string;
+  hasActivePass: boolean;
 }
 
-const ChatInputForm: React.FC<ChatInputFormProps> = React.memo(({ onSend, assignedName }) => {
-  const [inputText, setInputText] = useState("");
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
-  const widgetIdRef = useRef<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string>("");
+const ChatInputForm: React.FC<ChatInputFormProps> = React.memo(
+  ({ onSend, assignedName, hasActivePass }) => {
+    const [inputText, setInputText] = useState("");
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+    const widgetIdRef = useRef<string | null>(null);
+    const [turnstileToken, setTurnstileToken] = useState<string>("");
 
-  useEffect(() => {
-    const timer = setTimeout(() => inputRef.current?.focus(), 100);
-    return () => clearTimeout(timer);
-  }, []);
+    useEffect(() => {
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
+    }, []);
 
-  // Explicit Turnstile widget lifecycle: mount, token capture, and teardown
-  useEffect(() => {
-    let isMounted = true;
-    let pollCount = 0;
-    const maxPolls = 30; // 15 seconds
-
-    const renderWidget = () => {
-      if (!isMounted || widgetIdRef.current) return;
-      if (typeof window !== "undefined" && window.turnstile && turnstileContainerRef.current) {
-        try {
-          const id = window.turnstile.render(turnstileContainerRef.current, {
-            sitekey: TURNSTILE_SITE_KEY,
-            action: "chat",
-            theme: "auto",
-            size: "flexible",
-            callback: (token: string) => {
-              if (isMounted) setTurnstileToken(token);
-            },
-            "expired-callback": () => {
-              if (isMounted) setTurnstileToken("");
-            },
-            "error-callback": () => {
-              if (isMounted) setTurnstileToken("");
-            },
-          });
-          widgetIdRef.current = id;
-          return;
-        } catch (err) {
-          console.warn("[Turnstile Chat Render Error]:", err);
+    // Explicit Turnstile widget lifecycle: mount only when user does NOT have an active pass
+    useEffect(() => {
+      if (hasActivePass) {
+        if (widgetIdRef.current && window.turnstile?.remove) {
+          try {
+            window.turnstile.remove(widgetIdRef.current);
+          } catch {
+            // Teardown error ignored
+          }
+          widgetIdRef.current = null;
         }
+        return;
       }
 
-      pollCount++;
-      if (pollCount < maxPolls) {
-        setTimeout(renderWidget, 500);
-      }
-    };
+      let isMounted = true;
+      let pollCount = 0;
+      const maxPolls = 30; // 15 seconds
 
-    renderWidget();
+      const renderWidget = () => {
+        if (!isMounted || widgetIdRef.current) return;
+        if (typeof window !== "undefined" && window.turnstile && turnstileContainerRef.current) {
+          try {
+            const id = window.turnstile.render(turnstileContainerRef.current, {
+              sitekey: TURNSTILE_SITE_KEY,
+              action: "chat",
+              theme: "auto",
+              size: "flexible",
+              callback: (token: string) => {
+                if (isMounted) setTurnstileToken(token);
+              },
+              "expired-callback": () => {
+                if (isMounted) setTurnstileToken("");
+              },
+              "error-callback": () => {
+                if (isMounted) setTurnstileToken("");
+              },
+            });
+            widgetIdRef.current = id;
+            return;
+          } catch (err) {
+            console.warn("[Turnstile Chat Render Error]:", err);
+          }
+        }
 
-    return () => {
-      isMounted = false;
-      if (widgetIdRef.current && window.turnstile?.remove) {
+        pollCount++;
+        if (pollCount < maxPolls) {
+          setTimeout(renderWidget, 500);
+        }
+      };
+
+      renderWidget();
+
+      return () => {
+        isMounted = false;
+        if (widgetIdRef.current && window.turnstile?.remove) {
+          try {
+            window.turnstile.remove(widgetIdRef.current);
+          } catch {
+            // Teardown error ignored during component unmount
+          }
+          widgetIdRef.current = null;
+        }
+      };
+    }, [hasActivePass]);
+
+    const handleSubmit = (e: React.SyntheticEvent) => {
+      e.preventDefault();
+      const trimmed = inputText.trim();
+      if (!trimmed) return;
+
+      const token = hasActivePass
+        ? ""
+        : turnstileToken ||
+          (widgetIdRef.current && window.turnstile?.getResponse
+            ? window.turnstile.getResponse(widgetIdRef.current)
+            : "");
+
+      onSend(trimmed, token);
+      setInputText("");
+
+      if (widgetIdRef.current && window.turnstile?.reset) {
         try {
-          window.turnstile.remove(widgetIdRef.current);
+          window.turnstile.reset(widgetIdRef.current);
+          setTurnstileToken("");
         } catch {
-          // Teardown error ignored during component unmount
+          // Reset error ignored if Turnstile widget was already cycling
         }
-        widgetIdRef.current = null;
       }
     };
-  }, []);
 
-  const handleSubmit = (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    const trimmed = inputText.trim();
-    if (!trimmed) return;
-
-    const token =
-      turnstileToken ||
-      (widgetIdRef.current && window.turnstile?.getResponse
-        ? window.turnstile.getResponse(widgetIdRef.current)
-        : "");
-
-    onSend(trimmed, token);
-    setInputText("");
-
-    // Single-use token: reset widget immediately so next message gets a fresh token
-    if (widgetIdRef.current && window.turnstile?.reset) {
-      try {
-        window.turnstile.reset(widgetIdRef.current);
-        setTurnstileToken("");
-      } catch {
-        // Reset error ignored if Turnstile widget was already cycling
-      }
-    }
-  };
-
-  return (
-    <footer className="border-border-custom/60 mt-3 shrink-0 border-t pt-3">
-      <div className="text-text-muted mb-1.5 font-mono text-[11px]">
-        chatting as <span className="text-text font-bold">{assignedName}</span>
-      </div>
-
-      {/* Cloudflare Turnstile Verification Container */}
-      <div className="mb-2 flex min-h-[65px] items-center justify-center overflow-hidden rounded-lg">
-        <div ref={turnstileContainerRef} />
-      </div>
-
-      <form onSubmit={handleSubmit} className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            maxLength={280}
-            placeholder="say something..."
-            className="bg-surface border-border-custom text-text placeholder:text-text-muted focus:ring-primary w-full rounded-xl border py-2 pr-12 pl-3 font-sans text-xs outline-none focus:ring-2"
-          />
-          <span className="text-text-muted absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[9px]">
-            {inputText.length}/280
-          </span>
+    return (
+      <footer className="border-border-custom/60 mt-3 shrink-0 border-t pt-3">
+        <div className="text-text-muted mb-1.5 flex items-center justify-between font-mono text-[11px]">
+          <div>
+            chatting as <span className="text-text font-bold">{assignedName}</span>
+          </div>
+          {hasActivePass && (
+            <span
+              title="Verified session active. Chat smoothly without CAPTCHA challenges."
+              className="flex items-center gap-1 font-mono text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
+            >
+              <DoodleIcon name="shield" className="size-3" />
+              15m Pass Active
+            </span>
+          )}
         </div>
 
-        <button
-          type="submit"
-          disabled={!inputText.trim()}
-          className="bg-primary border-primary shrink-0 cursor-pointer rounded-xl border px-3 py-2 font-mono text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
-        >
-          send ↵
-        </button>
-      </form>
-    </footer>
-  );
-});
+        {/* Cloudflare Turnstile Verification Container: renders only when pass is missing or expired */}
+        {!hasActivePass && (
+          <div className="mb-2 flex min-h-[65px] items-center justify-center overflow-hidden rounded-lg">
+            <div ref={turnstileContainerRef} />
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              maxLength={280}
+              placeholder="say something..."
+              className="bg-surface border-border-custom text-text placeholder:text-text-muted focus:ring-primary w-full rounded-xl border py-2 pr-12 pl-3 font-sans text-xs outline-none focus:ring-2"
+            />
+            <span className="text-text-muted absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[9px]">
+              {inputText.length}/280
+            </span>
+          </div>
+
+          <button
+            type="submit"
+            disabled={!inputText.trim()}
+            className="bg-primary border-primary shrink-0 cursor-pointer rounded-xl border px-3 py-2 font-mono text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+          >
+            send ↵
+          </button>
+        </form>
+      </footer>
+    );
+  }
+);
 
 // Memoized Message List — avoids re-rendering live message items when irrelevant state changes
 interface MessageListProps {
@@ -266,6 +294,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
     displayName,
     assignedName,
     hasOnboarded,
+    hasActivePass,
     sendMessage,
     setUsername,
     clearError,
@@ -554,7 +583,11 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
             />
 
             {/* Footer Input Form */}
-            <ChatInputForm onSend={sendMessage} assignedName={assignedName || displayName} />
+            <ChatInputForm
+              onSend={sendMessage}
+              assignedName={assignedName || displayName}
+              hasActivePass={hasActivePass}
+            />
           </div>
 
           {/* CENTER SPACER: Allows Portfolio Hero / Content to show cleanly between the two panels */}
