@@ -48,6 +48,9 @@ export async function getTurnstileSecret(locals?: App.Locals): Promise<string | 
     cfEnv?.CLOUDFLARE_TURNSTILE_SECRET ||
     (typeof process !== "undefined"
       ? process.env?.TURNSTILE_SECRET || process.env?.TURNSTILE_SECRET_KEY
+      : undefined) ||
+    (typeof import.meta !== "undefined" && import.meta.env
+      ? (import.meta.env.TURNSTILE_SECRET as string | undefined)
       : undefined)) as string | undefined;
   return secret?.trim() || null;
 }
