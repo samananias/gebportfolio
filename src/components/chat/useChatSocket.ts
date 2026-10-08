@@ -25,7 +25,7 @@ export interface UseChatSocketReturn {
   hasOnboarded: boolean;
   error: string | null;
   typingUsers: string[];
-  sendMessage: (text: string) => boolean;
+  sendMessage: (text: string, turnstileToken?: string) => boolean;
   setUsername: (newName: string) => boolean;
   sendTypingSignal: (isTyping: boolean) => void;
   clearError: () => void;
@@ -38,7 +38,20 @@ const SESSION_STORAGE_KEY = "portfolio_chat_session_token_v1";
 const POLL_INTERVAL_MS = 5000;
 
 const CHESS_AVATARS = ["knight", "rook", "bishop", "pawn", "king", "queen"];
-const RESERVED_NAMES = ["admin", "system", "mod", "moderator", "owner"];
+const RESERVED_NAMES = [
+  "admin",
+  "system",
+  "mod",
+  "moderator",
+  "owner",
+  "bot",
+  "anthropic",
+  "claude",
+  "openai",
+  "gpt",
+  "gemini",
+  "mistral",
+];
 
 /**
  * Validates a user-submitted display name.
@@ -197,7 +210,7 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
 
   // Action: Send Message via HTTP POST
   const sendMessage = useCallback(
-    (text: string): boolean => {
+    (text: string, turnstileToken?: string): boolean => {
       const trimmed = text.trim();
       if (!trimmed) return false;
 
@@ -217,10 +230,20 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
       fetch("/api/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: currentName, avatar, text: trimmed }),
+        body: JSON.stringify({
+          sender: currentName,
+          avatar,
+          text: trimmed,
+          "cf-turnstile-response": turnstileToken || "",
+        }),
       })
-        .then((res) => res.json())
-        .then((data) => {
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            setError(data.error || "Failed to send message.");
+            fetchMessages();
+            return;
+          }
           if (data && Array.isArray(data.history)) {
             setMessages(data.history);
           }
@@ -228,6 +251,7 @@ export function useChatSocket(options: UseChatSocketOptions = {}): UseChatSocket
         })
         .catch((err) => {
           console.error("[Chat Send Error]:", err);
+          setError("Network error while sending message.");
         });
 
       return true;

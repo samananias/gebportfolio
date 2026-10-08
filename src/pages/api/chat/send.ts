@@ -1,5 +1,12 @@
 import type { APIRoute } from "astro";
 import { addChatMessage, type ChatMessage } from "./messages";
+import {
+  getClientIp,
+  isOriginAllowed,
+  isReservedSender,
+  checkRateLimit,
+} from "../../../lib/rateLimit";
+import { verifyTurnstileToken, getTurnstileSecret } from "../../../lib/turnstile";
 
 export const prerender = false;
 
@@ -19,21 +26,106 @@ function sanitizeText(input: string): string {
 
 export const POST: APIRoute = async ({ request, locals }) => {
   try {
-    const body = await request.json().catch(() => ({}));
-    const { sender, avatar, text } = body;
+    // 1. Origin / Referer validation
+    if (!isOriginAllowed(request)) {
+      return new Response(JSON.stringify({ ok: false, error: "Forbidden origin." }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-    if (!sender || !text || typeof text !== "string" || text.trim().length === 0) {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const { sender, avatar, text, website, _hp } = body;
+
+    // 2. Honeypot trap: silently accept bot submissions without writing to storage
+    if (website || _hp) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // 3. Sender and text presence check
+    if (
+      !sender ||
+      typeof sender !== "string" ||
+      !text ||
+      typeof text !== "string" ||
+      text.trim().length === 0
+    ) {
       return new Response(JSON.stringify({ ok: false, error: "Sender and text are required." }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
+    // 4. Server-side sender filtering against impersonation / bot scripts
+    if (isReservedSender(sender)) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Sender name is reserved or invalid (must be 3-20 characters without bot tokens).",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const clientIp = getClientIp(request);
+
+    // 5. Turnstile bot verification (prompt.md: gate, don't replace)
+    const turnstileSecret = await getTurnstileSecret(locals);
+    const turnstileResult = await verifyTurnstileToken({
+      token: body["cf-turnstile-response"],
+      secret: turnstileSecret,
+      clientIp,
+      expectedAction: "chat",
+    });
+
+    if (!turnstileResult.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: turnstileResult.error || "Security verification failed. Please try again.",
+        }),
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // 6. Rate limiting: 5 messages per 60s, 3s minimum cooldown per IP
+    const rateCheck = checkRateLimit({
+      key: `chat:${clientIp}`,
+      maxRequests: 5,
+      windowMs: 60_000,
+      cooldownMs: 3_000,
+    });
+
+    if (!rateCheck.allowed) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Too many messages sent. Please wait a moment before sending another message.",
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(Math.ceil((rateCheck.retryAfterMs || 3000) / 1000)),
+          },
+        }
+      );
+    }
+
     const cleanText = sanitizeText(text);
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       sender: sanitizeText(sender).slice(0, 20),
-      avatar: avatar || "knight",
+      avatar: (typeof avatar === "string" && avatar) || "knight",
       text: cleanText,
       timestamp: Date.now(),
     };

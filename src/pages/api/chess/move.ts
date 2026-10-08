@@ -8,11 +8,46 @@ import {
   INITIAL_FEN,
 } from "../../../lib/chess/storage";
 import { verifySession, COOKIE_NAME } from "../../../lib/chess/session";
+import { getClientIp, isOriginAllowed, checkRateLimit } from "../../../lib/rateLimit";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   try {
+    // 1. Origin verification
+    if (!isOriginAllowed(request)) {
+      return new Response(JSON.stringify({ ok: false, reason: "forbidden_origin" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // 2. Rate limiting: max 12 moves per 60s, 2.5s minimum cooldown per IP
+    const clientIp = getClientIp(request);
+    const rateCheck = checkRateLimit({
+      key: `chess:move:${clientIp}`,
+      maxRequests: 12,
+      windowMs: 60_000,
+      cooldownMs: 2_500,
+    });
+
+    if (!rateCheck.allowed) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: "rate_limited",
+          error: "Please wait a moment before making another move.",
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(Math.ceil((rateCheck.retryAfterMs || 2500) / 1000)),
+          },
+        }
+      );
+    }
+
     // Verify signed session cookie
     const existingCookie = cookies.get(COOKIE_NAME)?.value;
     const session = await verifySession(existingCookie);

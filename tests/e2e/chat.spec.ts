@@ -106,4 +106,33 @@ test.describe("Anonymous Real-Time Chatbox Onboarding & Verification", () => {
       await expect(dialog).not.toBeVisible();
     }).toPass({ timeout: 5000 });
   });
+
+  test("should reject reserved bot sender names on /api/chat/send", async ({ request }) => {
+    const res = await request.post("/api/chat/send", {
+      data: {
+        sender: "AnthropicBot",
+        text: "Hello from a simulated bot",
+        avatar: "knight",
+      },
+    });
+
+    expect(res.status()).toBe(400);
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.error).toContain("reserved");
+  });
+
+  test("should silently drop submissions that fill honeypot fields", async ({ request }) => {
+    const res = await request.post("/api/chat/send", {
+      data: {
+        sender: "RealUser",
+        text: "Spam content",
+        website: "http://spamsite.com",
+      },
+    });
+
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+  });
 });

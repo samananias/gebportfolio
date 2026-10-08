@@ -199,8 +199,10 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
             showToast("It's not your team's turn right now.");
           } else if (data.reason === "illegal_move") {
             showToast("Illegal move for this position.");
+          } else if (data.reason === "rate_limited") {
+            showToast("Slow down! Please wait a moment between moves.");
           } else {
-            showToast(`Rejected: ${data.reason}`);
+            showToast(`Rejected: ${data.error || data.reason}`);
           }
         }
       } catch {
@@ -223,7 +225,7 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
           setPendingPromotion(null);
           showToast(`New Match Started! You are Team ${data.state.yourSide.toUpperCase()}`);
         } else {
-          showToast(`Reset failed: ${data.reason}`);
+          showToast(`Reset failed: ${data.error || data.reason}`);
         }
       } catch {
         showToast("Failed to connect to game server.");

@@ -4,6 +4,7 @@ import { ChessWidget } from "../chess/ChessWidget";
 import { GameDetailsModal, type PublicGameState } from "../chess/GameDetailsModal";
 import { ToastContainer, MistakeIcon } from "../feedback/Toast";
 import { DoodleIcon } from "../ui/DoodleIcon";
+import { TURNSTILE_SITE_KEY } from "../../lib/turnstileConstants";
 
 interface ChatBoxProps {
   isOpen: boolean;
@@ -32,31 +33,109 @@ function formatRelativeTime(timestamp: number): string {
 
 // Memoized Chat Input Form — keeps input typing state completely isolated from ChatBox and 3D Canvas
 interface ChatInputFormProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, turnstileToken?: string) => void;
   assignedName: string;
 }
 
 const ChatInputForm: React.FC<ChatInputFormProps> = React.memo(({ onSend, assignedName }) => {
   const [inputText, setInputText] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string>("");
 
   useEffect(() => {
     const timer = setTimeout(() => inputRef.current?.focus(), 100);
     return () => clearTimeout(timer);
   }, []);
 
+  // Explicit Turnstile widget lifecycle: mount, token capture, and teardown
+  useEffect(() => {
+    let isMounted = true;
+    let pollCount = 0;
+    const maxPolls = 30; // 15 seconds
+
+    const renderWidget = () => {
+      if (!isMounted || widgetIdRef.current) return;
+      if (typeof window !== "undefined" && window.turnstile && turnstileContainerRef.current) {
+        try {
+          const id = window.turnstile.render(turnstileContainerRef.current, {
+            sitekey: TURNSTILE_SITE_KEY,
+            action: "chat",
+            theme: "auto",
+            size: "flexible",
+            callback: (token: string) => {
+              if (isMounted) setTurnstileToken(token);
+            },
+            "expired-callback": () => {
+              if (isMounted) setTurnstileToken("");
+            },
+            "error-callback": () => {
+              if (isMounted) setTurnstileToken("");
+            },
+          });
+          widgetIdRef.current = id;
+          return;
+        } catch (err) {
+          console.warn("[Turnstile Chat Render Error]:", err);
+        }
+      }
+
+      pollCount++;
+      if (pollCount < maxPolls) {
+        setTimeout(renderWidget, 500);
+      }
+    };
+
+    renderWidget();
+
+    return () => {
+      isMounted = false;
+      if (widgetIdRef.current && window.turnstile?.remove) {
+        try {
+          window.turnstile.remove(widgetIdRef.current);
+        } catch {
+          // Teardown error ignored during component unmount
+        }
+        widgetIdRef.current = null;
+      }
+    };
+  }, []);
+
   const handleSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault();
     const trimmed = inputText.trim();
     if (!trimmed) return;
-    onSend(trimmed);
+
+    const token =
+      turnstileToken ||
+      (widgetIdRef.current && window.turnstile?.getResponse
+        ? window.turnstile.getResponse(widgetIdRef.current)
+        : "");
+
+    onSend(trimmed, token);
     setInputText("");
+
+    // Single-use token: reset widget immediately so next message gets a fresh token
+    if (widgetIdRef.current && window.turnstile?.reset) {
+      try {
+        window.turnstile.reset(widgetIdRef.current);
+        setTurnstileToken("");
+      } catch {
+        // Reset error ignored if Turnstile widget was already cycling
+      }
+    }
   };
 
   return (
     <footer className="border-border-custom/60 mt-3 shrink-0 border-t pt-3">
       <div className="text-text-muted mb-1.5 font-mono text-[11px]">
         chatting as <span className="text-text font-bold">{assignedName}</span>
+      </div>
+
+      {/* Cloudflare Turnstile Verification Container */}
+      <div className="mb-2 flex min-h-[65px] items-center justify-center overflow-hidden rounded-lg">
+        <div ref={turnstileContainerRef} />
       </div>
 
       <form onSubmit={handleSubmit} className="flex items-center gap-2">

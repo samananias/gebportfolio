@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Implemented multi-layer anti-bot defenses and edge rate limiting across live chat and chess endpoints (ADR 0011):
+  - Created `src/lib/rateLimit.ts` providing zero-overhead in-memory edge isolate rate limiting, origin/referer verification against third-party bot scripts, and server-side sender moderation.
+  - Hardened `POST /api/chat/send` with strict IP rate limiting (5 msgs/min with a 3s cooldown), honeypot traps (`website`, `_hp`), and server-side blacklist for reserved and AI model tokens (`anthropic`, `gpt`, `bot`, `admin`).
+  - Hardened `POST /api/chess/move` with move rate limiting (12 moves/min with a 2.5s cooldown) and origin validation.
+  - Hardened `POST /api/chess/reset` to forbid manual resets during active matches (`game_in_progress` validation via `turn-arbiter`), restricting resets exclusively to concluded games (checkmate, draw, stalemate) with rate limiting.
+  - Integrated Cloudflare Turnstile CAPTCHA verification (`0x4AAAAAAFRF21R_W1pBeMMF`) following the Turnstile Spin specification across Contact Form (`action: "contact"`) and Live Chat (`action: "chat"`) with canonical server-side siteverify gating in `POST /api/contact` and `POST /api/chat/send`, single-use token lifecycle management, and typed Workers secret bindings (`TURNSTILE_SECRET`).
+  - Authored comprehensive documentation in `docs/engineering/SecurityAndBotDefense.md` and ADR `docs/decisions/0011-anti-bot-rate-limiting-and-game-protection.md`.
+
 - Fixed flaky Playwright E2E test `should interpolate through intermediate positions on a fast multi-slide jump` in `tests/e2e/core-mindset-carousel.spec.ts`. Separated the slide 1 parking assertion into its own settled poll before triggering the jump to slide 5, captured intermediate eased transform values directly within browser `requestAnimationFrame` cycles, and explicitly dispatched `scroll` events to prevent synthetic `scrollTo` event coalescing and retry timing loops under throttled CI environments.
 
 - Refactored `AGENTS.md`, `CLAUDE.md`, and `.agents/AGENTS.md` following the
