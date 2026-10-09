@@ -92,6 +92,7 @@ export async function addChatMessage(locals: App.Locals, msg: ChatMessage): Prom
     const existing = await getChatHistory(locals);
     const updated = [...existing, msg].slice(-MAX_CHAT_HISTORY);
     await kv.put(CHAT_KV_KEY, JSON.stringify(updated));
+    historyCache = null;
     return updated;
   }
 
@@ -103,8 +104,76 @@ export async function addChatMessage(locals: App.Locals, msg: ChatMessage): Prom
   return localChatHistory;
 }
 
+// ---------------------------------------------------------------------------
+// Abuse guards (applied before spending a KV write)
+// ---------------------------------------------------------------------------
+const GLOBAL_MAX_PER_MINUTE = 15; // whole room, all senders
+const SAME_SENDER_DUPE_WINDOW_MS = 60_000;
+const CROSS_SENDER_DUPE_WINDOW_MS = 10 * 60_000;
+const CROSS_SENDER_MIN_KEY_LENGTH = 12; // let short "hi"/"lol" repeat across people
+
+function normalizeForDupe(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+/**
+ * Returns true if the message should be silently dropped (not written to KV).
+ * Runs against the shared KV history, so it works across isolates (KV is
+ * eventually consistent, so the caps are approximate, not exact).
+ */
+export function shouldDropMessage(history: ChatMessage[], msg: ChatMessage, now = Date.now()) {
+  const recent = history.filter((m) => !m.isSystem);
+  const key = normalizeForDupe(msg.text);
+
+  if (recent.filter((m) => now - m.timestamp < 60_000).length >= GLOBAL_MAX_PER_MINUTE) {
+    return true;
+  }
+  if (!key) return false;
+
+  for (const m of recent) {
+    if (normalizeForDupe(m.text) !== key) continue;
+    const age = now - m.timestamp;
+    if (m.sender === msg.sender && age < SAME_SENDER_DUPE_WINDOW_MS) return true;
+    if (
+      m.sender !== msg.sender &&
+      key.length >= CROSS_SENDER_MIN_KEY_LENGTH &&
+      age < CROSS_SENDER_DUPE_WINDOW_MS
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Guarded append: drops spam silently (the sender still sees success, so bots
+ * don't adapt) and costs 0 KV writes when dropped.
+ */
+export async function addChatMessageGuarded(
+  locals: App.Locals,
+  msg: ChatMessage
+): Promise<{ accepted: boolean; history: ChatMessage[] }> {
+  const existing = await getChatHistory(locals);
+  if (shouldDropMessage(existing, msg)) {
+    return { accepted: false, history: existing };
+  }
+  const history = await addChatMessage(locals, msg);
+  return { accepted: true, history };
+}
+
+// Short-lived isolate cache so many polling clients don't each cost a KV read.
+let historyCache: { at: number; data: ChatMessage[] } | null = null;
+const HISTORY_CACHE_TTL_MS = 3000;
+
 export const GET: APIRoute = async ({ locals }) => {
-  const messages = await getChatHistory(locals);
+  const now = Date.now();
+  let messages: ChatMessage[];
+  if (historyCache && now - historyCache.at < HISTORY_CACHE_TTL_MS) {
+    messages = historyCache.data;
+  } else {
+    messages = await getChatHistory(locals);
+    historyCache = { at: now, data: messages };
+  }
   return new Response(JSON.stringify({ messages }), {
     status: 200,
     headers: {

@@ -1,15 +1,16 @@
 import type { APIRoute } from "astro";
-import { addChatMessage, type ChatMessage } from "./messages";
+import { addChatMessageGuarded, type ChatMessage } from "./messages";
 import {
   getClientIp,
   isOriginAllowed,
   isReservedSender,
   checkRateLimit,
+  isChatLocked,
 } from "../../../lib/rateLimit";
 import {
   verifyTurnstileToken,
   getTurnstileSecret,
-  verifyChatPass,
+  verifyChatPassDetailed,
   issueChatPass,
   getCookie,
 } from "../../../lib/turnstile";
@@ -37,6 +38,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ ok: false, error: "Forbidden origin." }), {
         status: 403,
         headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (await isChatLocked()) {
+      return new Response(JSON.stringify({ ok: false, error: "Chat is temporarily paused." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json", "Retry-After": "300" },
       });
     }
 
@@ -88,9 +96,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       request.headers.get("x-chat-pass") ||
       getCookie(request, "chat_pass");
 
+    // The pass is bound to the display name it was issued for. Posting under a
+    // different name requires a fresh Turnstile solve.
+    const requestedName = sender.trim();
     let isPassValid = false;
     if (providedPass) {
-      isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret);
+      const info = await verifyChatPassDetailed(providedPass, clientIp, turnstileSecret);
+      isPassValid = info.valid && info.name === requestedName;
     }
 
     let activePass = isPassValid ? providedPass : null;
@@ -123,7 +135,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       // Turnstile verified successfully! Issue fresh 15-minute pass
-      activePass = await issueChatPass(clientIp, turnstileSecret);
+      activePass = await issueChatPass(clientIp, turnstileSecret, undefined, requestedName);
     }
 
     // 6. Rate limiting: 5 messages per 60s, 3s minimum cooldown per IP
@@ -150,6 +162,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
+    const nameCheck = checkRateLimit({
+      key: `chat:name:${requestedName.toLowerCase()}`,
+      maxRequests: 5,
+      windowMs: 60_000,
+      cooldownMs: 3_000,
+    });
+    if (!nameCheck.allowed) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Too many messages sent. Please slow down." }),
+        { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "3" } }
+      );
+    }
+
     const cleanText = sanitizeText(text);
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -159,7 +184,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       timestamp: Date.now(),
     };
 
-    const updatedHistory = await addChatMessage(locals, newMessage);
+    const { history: updatedHistory } = await addChatMessageGuarded(locals, newMessage);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

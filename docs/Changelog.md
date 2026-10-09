@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Hardened Live Chat security with name-bound passes, spam drop guards, and emergency kill switch (ADR 0012, 2026-10-09):
+  - **Name-Bound Three-Part Pass**: Upgraded chat passes in `src/lib/turnstile.ts` to `<exp>.<nameHex>.<signature>` binding client IP, display name, and expiry (`${clientIp}:${name}:${exp}`). Posting under a different display name strictly requires a fresh Turnstile solve. Added `verifyChatPassDetailed()` and preserved `verifyChatPass()` boolean check for chess moves.
+  - **Fail-Closed Secret & Strict Origin Restraint**: Removed generic `.pages.dev` and `.workers.dev` wildcards in `src/lib/rateLimit.ts` and `src/lib/turnstile.ts`. Enforced fail-closed behavior outside dev/test when `TURNSTILE_SECRET` is unconfigured.
+  - **Spam & Duplicate-Text Drop Rules**: Added `shouldDropMessage()` and `addChatMessageGuarded()` in `src/pages/api/chat/messages.ts` with a 15-msg/min room threshold, 60s same-sender duplicate drop, and 10-minute cross-sender duplicate flood drop (silent acceptance, 0 KV writes).
+  - **Per-Name Rate Limiting**: Added `chat:name:<handle>` rate limit (5 msgs / 60s, 3s cooldown) on `POST /api/chat/send`.
+  - **Isolate History Cache**: Added a 3-second cache (`HISTORY_CACHE_TTL_MS = 3000`) on `GET /api/chat/messages` to protect KV read quotas during high-frequency polling.
+  - **Emergency Kill Switch**: Added `isChatLocked()` checking `CHAT_LOCKED=1` to return HTTP 503 (`Retry-After: 300`) during persistent floods.
+
 - Fixed Live Chat scroll displacement bug and implemented Smart Sticky Scroll with history preservation:
   - **Identical Polling Bailout**: Added `areMessagesIdentical` shallow boundary and item equality check to `fetchMessages()` and `sendMessage()` in `src/components/chat/useChatSocket.ts`. Prevents assigning new array references when 5-second polling returns unchanged message history, eliminating wasteful re-renders.
   - **User-Aware Scroll Preservation**: Replaced blind `scrollIntoView()` on every render with localized `container.scrollTo()` inside `MessageList` in `src/components/chat/ChatBox.tsx`. When a user scrolls up to read earlier messages, auto-scroll is paused and their scroll position is strictly preserved across all polling cycles.

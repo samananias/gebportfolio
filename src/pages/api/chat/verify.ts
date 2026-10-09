@@ -1,5 +1,11 @@
 import type { APIRoute } from "astro";
-import { getClientIp, isOriginAllowed, checkRateLimit } from "../../../lib/rateLimit";
+import {
+  getClientIp,
+  isOriginAllowed,
+  isReservedSender,
+  checkRateLimit,
+  isChatLocked,
+} from "../../../lib/rateLimit";
 import {
   verifyTurnstileToken,
   getTurnstileSecret,
@@ -20,7 +26,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    if (await isChatLocked()) {
+      return new Response(JSON.stringify({ ok: false, error: "Chat is temporarily paused." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json", "Retry-After": "300" },
+      });
+    }
+
     const token = body["cf-turnstile-response"] || body.token;
+    const senderName = typeof body.sender === "string" ? body.sender.trim() : "";
+    if (!senderName || isReservedSender(senderName)) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Display name is reserved or invalid (3-20 characters).",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
     const clientIp = getClientIp(request);
     const turnstileSecret = await getTurnstileSecret(locals);
 
@@ -73,7 +96,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // 4. Issue 15-minute human pass
-    const pass = await issueChatPass(clientIp, turnstileSecret, CHAT_PASS_TTL_MS);
+    const pass = await issueChatPass(clientIp, turnstileSecret, CHAT_PASS_TTL_MS, senderName);
     const expiresAt = Date.now() + CHAT_PASS_TTL_MS;
 
     const isProd = import.meta.env.PROD && process.env.PLAYWRIGHT_E2E !== "1";

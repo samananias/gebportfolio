@@ -30,8 +30,8 @@ export function isPreviewHostname(hostname?: string): boolean {
   if (!hostname) return false;
   const host = hostname.toLowerCase().split(":")[0];
   if (host === "localhost" || host === "127.0.0.1") return true;
-  if (host.endsWith(".pages.dev") && host !== "gebportfolio.pages.dev") return true;
-  if (host.endsWith(".workers.dev") && host !== "gebportfolio.workers.dev") return true;
+  if (host === "gebportfolio.pages.dev" || host.endsWith(".gebportfolio.pages.dev")) return true;
+  if (host === "gebportfolio.workers.dev") return true;
   return false;
 }
 
@@ -61,7 +61,7 @@ export async function getTurnstileSecret(locals?: App.Locals): Promise<string | 
 export async function verifyTurnstileToken(
   options: VerifyTurnstileOptions
 ): Promise<VerifyTurnstileResult> {
-  const { token, secret, clientIp, expectedAction, requestHostname } = options;
+  const { token, secret, clientIp, expectedAction } = options;
 
   // In test/local environments, permit requests if no secret is configured or during Playwright runs
   if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
@@ -70,17 +70,10 @@ export async function verifyTurnstileToken(
     }
   }
 
-  // Preview environment tolerance: if secret is not yet configured in Cloudflare Pages Preview variables
+  // Fail closed: a missing secret never verifies anything outside dev/test.
   if (!secret) {
-    if (isPreviewHostname(requestHostname)) {
-      console.warn(
-        `[Turnstile Preview Notice]: TURNSTILE_SECRET is not configured for preview host '${requestHostname}'. Permitting verification for preview evaluation.`
-      );
-      return { success: true };
-    }
-
     console.error(
-      "[Turnstile Error]: TURNSTILE_SECRET is not configured. Add it in Cloudflare Dashboard > Workers & Pages > gebportfolio > Settings > Variables and Secrets."
+      "[Turnstile Error]: TURNSTILE_SECRET is not configured. Add it in Cloudflare Dashboard > Workers & Pages > gebportfolio > Settings > Variables and Secrets (for BOTH Production and Preview)."
     );
     return {
       success: false,
@@ -153,10 +146,7 @@ export async function verifyTurnstileToken(
 
     const isHostnameAllowed =
       result.hostname &&
-      (allowed.has(result.hostname) ||
-        result.hostname.endsWith(".gebportfolio.pages.dev") ||
-        result.hostname.endsWith(".pages.dev") ||
-        result.hostname.endsWith(".workers.dev"));
+      (allowed.has(result.hostname) || result.hostname.endsWith(".gebportfolio.pages.dev"));
 
     if (!isHostnameAllowed) {
       console.warn(`[Turnstile Hostname Mismatch]: untrusted host ${result.hostname}`);
@@ -191,85 +181,119 @@ export function getCookie(request: Request, name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-/**
- * Issues an HMAC-SHA256 signed chat pass bound to client IP and expiration time.
- */
-export async function issueChatPass(
-  clientIp: string,
-  secret: string | null | undefined,
-  ttlMs = CHAT_PASS_TTL_MS
-): Promise<string> {
-  const exp = Date.now() + ttlMs;
-  const data = `${clientIp || "unknown"}:${exp}`;
+function isDevOrTest(): boolean {
+  return !import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1";
+}
 
-  // If in dev/test/preview without real secret, produce a recognizable test token
-  if (!secret) {
-    return `${exp}.preview-test-pass`;
+function nameToHex(name: string): string {
+  return Array.from(new TextEncoder().encode(name))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexToName(hex: string): string | null {
+  if (!/^[0-9a-f]*$/.test(hex) || hex.length % 2 !== 0 || hex.length > 160) return null;
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
   }
+}
 
-  const key = await crypto.subtle.importKey(
+async function hmacKey(secret: string, usage: "sign" | "verify"): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    [usage]
   );
+}
 
+/**
+ * Issues an HMAC-SHA256 signed chat pass bound to the client IP, the chosen
+ * display name, and the expiry. Format: `<exp>.<nameHex>.<signature>`.
+ * Because the name is signed, one Turnstile solve can only post as ONE identity.
+ */
+export async function issueChatPass(
+  clientIp: string,
+  secret: string | null | undefined,
+  ttlMs = CHAT_PASS_TTL_MS,
+  name = ""
+): Promise<string> {
+  const exp = Date.now() + ttlMs;
+  const nameHex = nameToHex(name);
+
+  if (!secret) {
+    // Never mint passes without a secret in production.
+    if (!isDevOrTest()) throw new Error("TURNSTILE_SECRET is not configured");
+    return `${exp}.${nameHex}.preview-test-pass`;
+  }
+
+  const key = await hmacKey(secret, "sign");
+  const data = `${clientIp || "unknown"}:${name}:${exp}`;
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
   const sigBase64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 
-  return `${exp}.${sigBase64}`;
+  return `${exp}.${nameHex}.${sigBase64}`;
+}
+
+export interface ChatPassInfo {
+  valid: boolean;
+  name?: string;
 }
 
 /**
- * Verifies that a chat pass is unexpired, authentic, and bound to the client's IP.
+ * Verifies a chat pass (unexpired, authentic, bound to this IP) and returns the
+ * display name it was issued for. Fails closed when no secret is configured
+ * (outside dev/test). Legacy 2-part passes are rejected.
  */
+export async function verifyChatPassDetailed(
+  pass: unknown,
+  clientIp: string,
+  secret: string | null | undefined
+): Promise<ChatPassInfo> {
+  if (typeof pass !== "string") return { valid: false };
+  const parts = pass.split(".");
+  if (parts.length !== 3) return { valid: false };
+
+  const [expStr, nameHex, sigBase64] = parts;
+  const exp = Number(expStr);
+  if (!exp || Number.isNaN(exp) || Date.now() > exp) return { valid: false };
+
+  const name = hexToName(nameHex);
+  if (name === null) return { valid: false };
+
+  if (isDevOrTest()) {
+    if (!secret || sigBase64 === "dev-test-pass" || sigBase64 === "preview-test-pass") {
+      return { valid: true, name };
+    }
+  }
+
+  if (!secret) return { valid: false };
+
+  try {
+    const key = await hmacKey(secret, "verify");
+    const base64Standard = sigBase64.replace(/-/g, "+").replace(/_/g, "/");
+    const rawSig = Uint8Array.from(atob(base64Standard), (c) => c.charCodeAt(0));
+    const data = `${clientIp || "unknown"}:${name}:${exp}`;
+    const ok = await crypto.subtle.verify("HMAC", key, rawSig, new TextEncoder().encode(data));
+    return ok ? { valid: true, name } : { valid: false };
+  } catch {
+    return { valid: false };
+  }
+}
+
+/** Boolean wrapper kept for callers that don't need the name (e.g. chess). */
 export async function verifyChatPass(
   pass: unknown,
   clientIp: string,
   secret: string | null | undefined
 ): Promise<boolean> {
-  if (typeof pass !== "string" || !pass.includes(".")) {
-    return false;
-  }
-
-  const [expStr, sigBase64] = pass.split(".");
-  const exp = Number(expStr);
-
-  if (!exp || Number.isNaN(exp) || Date.now() > exp) {
-    return false; // Expired
-  }
-
-  // In test/local/preview environments, permit dev or preview test pass
-  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1" || !secret) {
-    if (!secret || sigBase64 === "dev-test-pass" || sigBase64 === "preview-test-pass") {
-      return true;
-    }
-  }
-
-  if (!secret) {
-    return false;
-  }
-
-  const data = `${clientIp || "unknown"}:${exp}`;
-
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-
-    const base64Standard = sigBase64.replace(/-/g, "+").replace(/_/g, "/");
-    const rawSig = Uint8Array.from(atob(base64Standard), (c) => c.charCodeAt(0));
-
-    return await crypto.subtle.verify("HMAC", key, rawSig, new TextEncoder().encode(data));
-  } catch {
-    return false;
-  }
+  return (await verifyChatPassDetailed(pass, clientIp, secret)).valid;
 }
