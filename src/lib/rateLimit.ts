@@ -8,11 +8,25 @@
  * 4. Server-side sender name filtering against impersonation and bot scripts
  */
 
+import { getWorkersEnv } from "./bindings";
+
+/**
+ * Emergency kill switch. Set CHAT_LOCKED=1 in Cloudflare (Settings > Variables)
+ * to make /api/chat/send return 503 while a flood is in progress.
+ */
+export async function isChatLocked(): Promise<boolean> {
+  const env = await getWorkersEnv();
+  const v = (env?.CHAT_LOCKED ??
+    (typeof process !== "undefined" ? process.env?.CHAT_LOCKED : "")) as string | undefined;
+  return v === "1" || v === "true";
+}
+
 export interface RateLimitOptions {
   key: string;
   maxRequests: number;
   windowMs: number;
   cooldownMs?: number;
+  forceEnforce?: boolean;
 }
 
 interface MemoryLimitEntry {
@@ -73,8 +87,7 @@ export function isOriginAllowed(request: Request): boolean {
       if (
         allowedHosts.has(parsed.host) ||
         allowedHosts.has(parsed.hostname) ||
-        parsed.hostname.endsWith(".pages.dev") ||
-        parsed.hostname.endsWith(".workers.dev") ||
+        parsed.hostname.endsWith(".gebportfolio.pages.dev") ||
         (host && (parsed.host === host || parsed.hostname === host.split(":")[0]))
       ) {
         return true;
@@ -90,8 +103,7 @@ export function isOriginAllowed(request: Request): boolean {
       if (
         allowedHosts.has(parsed.host) ||
         allowedHosts.has(parsed.hostname) ||
-        parsed.hostname.endsWith(".pages.dev") ||
-        parsed.hostname.endsWith(".workers.dev") ||
+        parsed.hostname.endsWith(".gebportfolio.pages.dev") ||
         (host && (parsed.host === host || parsed.hostname === host.split(":")[0]))
       ) {
         return true;
@@ -143,7 +155,7 @@ export function checkRateLimit(options: RateLimitOptions): {
   allowed: boolean;
   retryAfterMs?: number;
 } {
-  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
+  if (!options.forceEnforce && (!import.meta.env?.PROD || process.env.PLAYWRIGHT_E2E === "1")) {
     return { allowed: true };
   }
 
@@ -193,4 +205,9 @@ export function checkRateLimit(options: RateLimitOptions): {
   entry.count += 1;
   entry.lastRequest = now;
   return { allowed: true };
+}
+
+/** Clears the in-memory rate limit store (used in test suites). */
+export function clearRateLimitStore(): void {
+  memoryStore.clear();
 }

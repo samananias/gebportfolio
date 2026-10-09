@@ -142,8 +142,11 @@ const TurnstileGateWidget: React.FC<TurnstileGateWidgetProps> = React.memo(
         pollCount++;
         if (pollCount < maxPolls) {
           setTimeout(renderWidget, 200);
-        } else if (typeof window !== "undefined" && !window.turnstile) {
-          // Fallback if Turnstile script is blocked or in automated test environments
+        } else if (
+          typeof window !== "undefined" &&
+          (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+        ) {
+          // Automated testing fallback exclusively for localhost/127.0.0.1
           onVerifyRef.current("dummy-test-token");
         }
       };
@@ -426,15 +429,15 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ isOpen, onClose }) => {
 
     const effectiveToken = token || (isTestOrDev ? "dummy-test-token" : "");
 
-    if (!effectiveToken && typeof window !== "undefined" && window.turnstile) {
-      setValidationError("Please complete the security verification below.");
+    if (!effectiveToken) {
+      setValidationError("Please complete the security verification challenge before joining.");
       return;
     }
 
     setIsVerifying(true);
     setValidationError(null);
 
-    const verified = await verifyAndActivatePass(effectiveToken || "dummy-test-token", trimmed);
+    const verified = await verifyAndActivatePass(effectiveToken, trimmed);
     if (!verified) {
       setIsVerifying(false);
       setOnboardingToken("");

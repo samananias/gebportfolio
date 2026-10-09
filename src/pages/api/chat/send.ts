@@ -1,15 +1,16 @@
 import type { APIRoute } from "astro";
-import { addChatMessage, type ChatMessage } from "./messages";
+import { addChatMessageGuarded, type ChatMessage } from "./messages";
 import {
   getClientIp,
   isOriginAllowed,
   isReservedSender,
   checkRateLimit,
+  isChatLocked,
 } from "../../../lib/rateLimit";
 import {
   verifyTurnstileToken,
   getTurnstileSecret,
-  verifyChatPass,
+  verifyChatPassDetailed,
   issueChatPass,
   getCookie,
 } from "../../../lib/turnstile";
@@ -37,6 +38,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ ok: false, error: "Forbidden origin." }), {
         status: 403,
         headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (await isChatLocked()) {
+      return new Response(JSON.stringify({ ok: false, error: "Chat is temporarily paused." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json", "Retry-After": "300" },
       });
     }
 
@@ -84,23 +92,70 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // 5. 15-Minute Human Chat Pass & Turnstile Bot Verification
     const providedPass =
-      (typeof body.chatPass === "string" && body.chatPass) ||
+      (typeof body.chatPass === "string" && body.chatPass.trim()) ||
       request.headers.get("x-chat-pass") ||
       getCookie(request, "chat_pass");
 
-    let isPassValid = false;
+    const turnstileToken =
+      typeof body["cf-turnstile-response"] === "string" ? body["cf-turnstile-response"].trim() : "";
+
+    const requestedName = sender.trim();
+    let activePass: string | null = null;
+
     if (providedPass) {
-      isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret);
+      const info = await verifyChatPassDetailed(providedPass, clientIp, turnstileSecret);
+      if (info.valid) {
+        if (info.name !== requestedName) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              requireTurnstile: true,
+              error: "Session identity mismatch.",
+            }),
+            {
+              status: 403,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+        activePass = providedPass;
+      } else {
+        // Provided pass is invalid, expired, or forged
+        if (!turnstileToken) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              requireTurnstile: true,
+              error: "Invalid or forged session pass.",
+            }),
+            {
+              status: 403,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+    } else if (!turnstileToken) {
+      // Neither a pass nor a Turnstile token was provided: reject unauthenticated requests
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          requireTurnstile: true,
+          error: "Authentication required. Please verify with Turnstile or provide a valid pass.",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
-    let activePass = isPassValid ? providedPass : null;
-
-    if (!isPassValid) {
+    if (!activePass) {
       const requestHost = request.headers.get("host") || new URL(request.url).host;
 
       // Pass is absent or expired: require Turnstile challenge token
       const turnstileResult = await verifyTurnstileToken({
-        token: body["cf-turnstile-response"],
+        token: turnstileToken,
         secret: turnstileSecret,
         clientIp,
         expectedAction: "chat",
@@ -123,7 +178,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       // Turnstile verified successfully! Issue fresh 15-minute pass
-      activePass = await issueChatPass(clientIp, turnstileSecret);
+      activePass = await issueChatPass(clientIp, turnstileSecret, undefined, requestedName);
     }
 
     // 6. Rate limiting: 5 messages per 60s, 3s minimum cooldown per IP
@@ -150,6 +205,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
+    const nameCheck = checkRateLimit({
+      key: `chat:name:${requestedName.toLowerCase()}`,
+      maxRequests: 5,
+      windowMs: 60_000,
+      cooldownMs: 3_000,
+    });
+    if (!nameCheck.allowed) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Too many messages sent. Please slow down." }),
+        { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "3" } }
+      );
+    }
+
     const cleanText = sanitizeText(text);
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -159,7 +227,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       timestamp: Date.now(),
     };
 
-    const updatedHistory = await addChatMessage(locals, newMessage);
+    const { history: updatedHistory } = await addChatMessageGuarded(locals, newMessage);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

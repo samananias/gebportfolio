@@ -15,6 +15,7 @@ Index of architectural decision records (ADRs) for the project.
 - [0009 - Suspend Keystatic Visual Editor](0009-suspend-keystatic-visual-editor.md) — Approved (2026-09-19)
 - [0010 - Resolve Cloudflare Bindings Lazily via cloudflare:workers](0010-resolve-cloudflare-bindings-lazily.md) — Approved (2026-09-19)
 - [0011 - Anti-Bot Rate Limiting, Origin Verification, and Game Protection](0011-anti-bot-rate-limiting-and-game-protection.md) — Approved (2026-10-08)
+- [0012 - Chat Hardening: Name-Bound Passes, Spam Drop Guards, and Kill Switch](0012-chat-hardening-name-bound-passes-and-abuse-guards.md) — Approved (2026-10-09)
 
 ## Status Meanings
 
