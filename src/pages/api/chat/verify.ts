@@ -34,6 +34,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const token = body["cf-turnstile-response"] || body.token;
+    if (!token || typeof token !== "string" || token.trim().length === 0) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Verification token is required.",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const senderName = typeof body.sender === "string" ? body.sender.trim() : "";
     if (!senderName || isReservedSender(senderName)) {
       return new Response(
@@ -99,7 +109,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const pass = await issueChatPass(clientIp, turnstileSecret, CHAT_PASS_TTL_MS, senderName);
     const expiresAt = Date.now() + CHAT_PASS_TTL_MS;
 
-    const isProd = import.meta.env.PROD && process.env.PLAYWRIGHT_E2E !== "1";
+    const isProd = Boolean(import.meta.env?.PROD) && process.env.PLAYWRIGHT_E2E !== "1";
     const cookieHeader = `chat_pass=${encodeURIComponent(pass)}; Path=/; Max-Age=900; SameSite=Lax${
       isProd ? "; Secure" : ""
     }`;

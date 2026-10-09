@@ -55,6 +55,13 @@ export async function getTurnstileSecret(locals?: App.Locals): Promise<string | 
   return secret?.trim() || null;
 }
 
+const redeemedTurnstileTokens = new Map<string, number>();
+const REPLAY_CACHE_TTL_MS = 10 * 60 * 1000;
+
+export function clearRedeemedTokensCache(): void {
+  redeemedTurnstileTokens.clear();
+}
+
 /**
  * Validates a Turnstile cf-turnstile-response token server-side via siteverify.
  */
@@ -63,9 +70,17 @@ export async function verifyTurnstileToken(
 ): Promise<VerifyTurnstileResult> {
   const { token, secret, clientIp, expectedAction } = options;
 
+  // Token shape validation (1 to 2048 non-whitespace characters)
+  if (typeof token !== "string" || token.trim().length === 0 || token.length > 2048) {
+    return {
+      success: false,
+      error: "Security verification token is missing or malformed.",
+    };
+  }
+
   // In test/local environments, permit requests if no secret is configured or during Playwright runs
-  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
-    if (!secret || token === "dummy-test-token" || !token) {
+  if (!import.meta.env?.PROD || process.env.PLAYWRIGHT_E2E === "1") {
+    if (!secret || token === "dummy-test-token") {
       return { success: true };
     }
   }
@@ -82,11 +97,15 @@ export async function verifyTurnstileToken(
     };
   }
 
-  // Token shape validation (1 to 2048 non-whitespace characters)
-  if (typeof token !== "string" || token.trim().length === 0 || token.length > 2048) {
+  const trimmedToken = token.trim();
+
+  // Sliding window replay defense
+  const seenAt = redeemedTurnstileTokens.get(trimmedToken);
+  if (seenAt && Date.now() - seenAt < REPLAY_CACHE_TTL_MS) {
     return {
       success: false,
-      error: "Security verification token is missing or malformed.",
+      error:
+        "Security verification token has already been redeemed. Please solve a fresh challenge.",
     };
   }
 
@@ -121,9 +140,14 @@ export async function verifyTurnstileToken(
 
     if (!result.success) {
       console.warn("[Turnstile Validation Failed]:", result["error-codes"]);
+      const isDuplicateOrTimeout = result["error-codes"]?.some(
+        (code) => code.includes("duplicate") || code.includes("timeout")
+      );
       return {
         success: false,
-        error: "Bot verification failed. Please try again.",
+        error: isDuplicateOrTimeout
+          ? "Security verification token is already redeemed or expired. Please solve a fresh challenge."
+          : "Bot verification failed. Please try again.",
       };
     }
 
@@ -141,7 +165,7 @@ export async function verifyTurnstileToken(
       };
     }
 
-    const isProd = import.meta.env.PROD && process.env.PLAYWRIGHT_E2E !== "1";
+    const isProd = Boolean(import.meta.env?.PROD) && process.env.PLAYWRIGHT_E2E !== "1";
     const allowed = isProd ? PROD_ALLOWED_HOSTNAMES : DEV_ALLOWED_HOSTNAMES;
 
     const isHostnameAllowed =
@@ -156,6 +180,7 @@ export async function verifyTurnstileToken(
       };
     }
 
+    redeemedTurnstileTokens.set(trimmedToken, Date.now());
     return { success: true };
   } catch (err) {
     console.error("[Turnstile Network Error]:", err);
@@ -182,7 +207,7 @@ export function getCookie(request: Request, name: string): string | null {
 }
 
 function isDevOrTest(): boolean {
-  return !import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1";
+  return !import.meta.env?.PROD || process.env.PLAYWRIGHT_E2E === "1";
 }
 
 function nameToHex(name: string): string {
@@ -296,4 +321,61 @@ export async function verifyChatPass(
   secret: string | null | undefined
 ): Promise<boolean> {
   return (await verifyChatPassDetailed(pass, clientIp, secret)).valid;
+}
+
+export interface ChatSessionResult {
+  valid: boolean;
+  payload?: {
+    sender: string;
+    clientIp: string;
+    expiresAt: number;
+    sessionId: string;
+  };
+  error?: string;
+}
+
+/** Wrapper providing object payload with sender and clientIp metadata. */
+export async function issueChatSession(
+  name: string,
+  clientIp: string,
+  secret: string | null | undefined,
+  ttlMs = CHAT_PASS_TTL_MS
+): Promise<string> {
+  return issueChatPass(clientIp, secret, ttlMs, name);
+}
+
+/** Wrapper verifying chat pass and returning session payload. */
+export async function verifyChatSession(
+  pass: unknown,
+  expectedName: string,
+  clientIp: string,
+  secret: string | null | undefined
+): Promise<ChatSessionResult> {
+  if (typeof pass !== "string") {
+    return { valid: false, error: "Invalid session credential format" };
+  }
+  const parts = pass.split(".");
+  if (parts.length !== 3) {
+    return { valid: false, error: "Invalid session credential format" };
+  }
+  const exp = Number(parts[0]);
+  if (!exp || Number.isNaN(exp) || Date.now() > exp) {
+    return { valid: false, error: "Session credential has expired. Please re-verify." };
+  }
+  const info = await verifyChatPassDetailed(pass, clientIp, secret);
+  if (!info.valid) {
+    return { valid: false, error: "Invalid session signature or forged credential." };
+  }
+  if (info.name !== expectedName) {
+    return { valid: false, error: "Session identity mismatch." };
+  }
+  return {
+    valid: true,
+    payload: {
+      sender: info.name || expectedName,
+      clientIp,
+      expiresAt: exp,
+      sessionId: pass,
+    },
+  };
 }

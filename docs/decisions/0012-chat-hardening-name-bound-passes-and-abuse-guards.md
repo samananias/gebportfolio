@@ -41,7 +41,19 @@ Following the initial rate limiting and Turnstile integration (ADR 0011), persis
 5. **Per-Name Rate Limiting (`src/pages/api/chat/send.ts`):**
    - Implemented a 5-message / 60-second limit with a 3-second cooldown per normalized handle (`chat:name:<handle>`).
 
-6. **Emergency Kill Switch (`CHAT_LOCKED`):**
+6. **WebSocket Handshake Authentication (`party/chat.ts`):**
+   - Enforces cryptographic three-part session pass verification (`verifyChatPassDetailed`) during the WebSocket `onConnect` handshake before admitting clients to the room.
+   - Connections with missing, forged, expired, or handle-mismatched credentials are sent an error frame (`code: 401`) and closed (`code: 4401`).
+   - Frame processing in `onMessage` validates that the active session has not expired (`Date.now() <= state.expiresAt`), terminating expired connections with code 4403.
+
+7. **Sliding-Window Replay Defense (`src/lib/turnstile.ts`):**
+   - Implemented a 10-minute in-memory sliding window cache (`redeemedTurnstileTokens`) to prevent immediate reuse or replay of redeemed Turnstile tokens across requests.
+
+8. **Strict HTTP API Boundary Defense (`src/pages/api/chat/*`):**
+   - `POST /api/chat/send` strictly rejects unauthenticated requests (missing pass and token) with HTTP 401 (`requireTurnstile: true`), and rejects forged passes or identity mismatches with HTTP 403, without invoking Cloudflare Siteverify subrequests.
+   - `POST /api/chat/verify` enforces non-empty token presence, returning HTTP 400 if missing.
+
+9. **Emergency Kill Switch (`CHAT_LOCKED`):**
    - Added `isChatLocked()` checking the `CHAT_LOCKED` environment variable.
    - Setting `CHAT_LOCKED=1` in Cloudflare Variables and Secrets immediately returns HTTP 503 (`Retry-After: 300`) on `/api/chat/send` and `/api/chat/verify`, preventing resource consumption during active floods.
 

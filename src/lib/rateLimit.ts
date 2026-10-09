@@ -26,6 +26,7 @@ export interface RateLimitOptions {
   maxRequests: number;
   windowMs: number;
   cooldownMs?: number;
+  forceEnforce?: boolean;
 }
 
 interface MemoryLimitEntry {
@@ -154,7 +155,7 @@ export function checkRateLimit(options: RateLimitOptions): {
   allowed: boolean;
   retryAfterMs?: number;
 } {
-  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
+  if (!options.forceEnforce && (!import.meta.env?.PROD || process.env.PLAYWRIGHT_E2E === "1")) {
     return { allowed: true };
   }
 
@@ -204,4 +205,9 @@ export function checkRateLimit(options: RateLimitOptions): {
   entry.count += 1;
   entry.lastRequest = now;
   return { allowed: true };
+}
+
+/** Clears the in-memory rate limit store (used in test suites). */
+export function clearRateLimitStore(): void {
+  memoryStore.clear();
 }

@@ -92,27 +92,70 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // 5. 15-Minute Human Chat Pass & Turnstile Bot Verification
     const providedPass =
-      (typeof body.chatPass === "string" && body.chatPass) ||
+      (typeof body.chatPass === "string" && body.chatPass.trim()) ||
       request.headers.get("x-chat-pass") ||
       getCookie(request, "chat_pass");
 
-    // The pass is bound to the display name it was issued for. Posting under a
-    // different name requires a fresh Turnstile solve.
+    const turnstileToken =
+      typeof body["cf-turnstile-response"] === "string" ? body["cf-turnstile-response"].trim() : "";
+
     const requestedName = sender.trim();
-    let isPassValid = false;
+    let activePass: string | null = null;
+
     if (providedPass) {
       const info = await verifyChatPassDetailed(providedPass, clientIp, turnstileSecret);
-      isPassValid = info.valid && info.name === requestedName;
+      if (info.valid) {
+        if (info.name !== requestedName) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              requireTurnstile: true,
+              error: "Session identity mismatch.",
+            }),
+            {
+              status: 403,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+        activePass = providedPass;
+      } else {
+        // Provided pass is invalid, expired, or forged
+        if (!turnstileToken) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              requireTurnstile: true,
+              error: "Invalid or forged session pass.",
+            }),
+            {
+              status: 403,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+    } else if (!turnstileToken) {
+      // Neither a pass nor a Turnstile token was provided: reject unauthenticated requests
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          requireTurnstile: true,
+          error: "Authentication required. Please verify with Turnstile or provide a valid pass.",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
 
-    let activePass = isPassValid ? providedPass : null;
-
-    if (!isPassValid) {
+    if (!activePass) {
       const requestHost = request.headers.get("host") || new URL(request.url).host;
 
       // Pass is absent or expired: require Turnstile challenge token
       const turnstileResult = await verifyTurnstileToken({
-        token: body["cf-turnstile-response"],
+        token: turnstileToken,
         secret: turnstileSecret,
         clientIp,
         expectedAction: "chat",

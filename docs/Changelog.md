@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Spam & Duplicate-Text Drop Rules**: Added `shouldDropMessage()` and `addChatMessageGuarded()` in `src/pages/api/chat/messages.ts` with a 15-msg/min room threshold, 60s same-sender duplicate drop, and 10-minute cross-sender duplicate flood drop (silent acceptance, 0 KV writes).
   - **Per-Name Rate Limiting**: Added `chat:name:<handle>` rate limit (5 msgs / 60s, 3s cooldown) on `POST /api/chat/send`.
   - **Isolate History Cache**: Added a 3-second cache (`HISTORY_CACHE_TTL_MS = 3000`) on `GET /api/chat/messages` to protect KV read quotas during high-frequency polling.
+  - **WebSocket Handshake Authentication**: Enforced cryptographic three-part pass verification (`<exp>.<nameHex>.<sig>`) during `onConnect` in `party/chat.ts`, closing unauthorized sockets with code 4401 and rejecting expired connections during message handling.
+  - **Sliding-Window Replay Defense**: Added a 10-minute in-memory replay cache in `src/lib/turnstile.ts` preventing immediate reuse of redeemed Turnstile tokens across requests.
+  - **Strict HTTP API Boundary Defense**: Guarded `POST /api/chat/send` to return HTTP 401 on unauthenticated requests and HTTP 403 on forged passes or identity mismatches without burning Siteverify quota, and guarded `POST /api/chat/verify` to require non-empty tokens (HTTP 400).
   - **Emergency Kill Switch**: Added `isChatLocked()` checking `CHAT_LOCKED=1` to return HTTP 503 (`Retry-After: 300`) during persistent floods.
+  - **Turnstile Security Test Suite**: Restored and passed 105 automated security assertions in `tests/e2e/turnstile-security.spec.ts` covering Siteverify rules, HMAC session passes, API routes, WebSocket auth, and rate limiters.
 
 - Fixed Live Chat scroll displacement bug and implemented Smart Sticky Scroll with history preservation:
   - **Identical Polling Bailout**: Added `areMessagesIdentical` shallow boundary and item equality check to `fetchMessages()` and `sendMessage()` in `src/components/chat/useChatSocket.ts`. Prevents assigning new array references when 5-second polling returns unchanged message history, eliminating wasteful re-renders.

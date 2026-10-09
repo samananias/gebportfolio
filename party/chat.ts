@@ -5,6 +5,8 @@
  * rate limiting, HTML escaping, and system event broadcasting.
  */
 
+import { verifyChatPassDetailed } from "../src/lib/turnstile";
+
 export interface ChatMessage {
   id: string;
   sender: string;
@@ -19,6 +21,7 @@ export interface ClientConnectionState {
   displayName: string;
   assignedName: string;
   avatar: string;
+  expiresAt: number;
   messageTimestamps: number[];
   lastMessageText?: string;
 }
@@ -72,16 +75,19 @@ export function isReservedName(name: string): boolean {
 export interface PartyConnection {
   id: string;
   send: (data: string) => void;
+  close?: (code?: number, reason?: string) => void;
 }
 
 export interface PartyConnectionContext {
   request: {
     url: string;
+    headers?: Headers | { get?: (k: string) => string | null };
   };
 }
 
 export interface PartyRoom {
   id: string;
+  env?: Record<string, string>;
   broadcast: (data: string, except?: string[]) => void;
 }
 
@@ -96,24 +102,55 @@ export default class PortfolioChatServer {
 
   /**
    * Called when a new WebSocket client connects.
+   * Authenticates session pass before admitting client to the room.
    */
   async onConnect(conn: PartyConnection, ctx: PartyConnectionContext) {
     const url = new URL(ctx.request.url);
-    const sessionToken =
-      url.searchParams.get("token") || `anon_${Math.random().toString(36).substring(2, 9)}`;
+    const pass = url.searchParams.get("pass") || url.searchParams.get("token") || "";
     const rawName = url.searchParams.get("name") || "TacticalKnight";
-
     const sanitizedRawName = sanitizeText(rawName).slice(0, 20) || "GuestPlayer";
+
+    const secret =
+      this.room.env?.TURNSTILE_SECRET ||
+      (typeof process !== "undefined" ? process.env?.TURNSTILE_SECRET : undefined);
+
+    const clientIp =
+      (typeof ctx.request.headers?.get === "function"
+        ? ctx.request.headers.get("cf-connecting-ip") ||
+          ctx.request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+        : "") || "unknown";
+
+    // Enforce cryptographic session authentication during WebSocket handshake
+    const passInfo = await verifyChatPassDetailed(pass, clientIp, secret);
+
+    if (!passInfo.valid || !passInfo.name || passInfo.name !== sanitizedRawName) {
+      conn.send(
+        JSON.stringify({
+          type: "error",
+          code: 401,
+          message: "Authentication required. Please complete security verification in Live Chat.",
+        })
+      );
+      if (typeof conn.close === "function") {
+        conn.close(4401, "Unauthorized");
+      }
+      return;
+    }
+
+    const exp = Number(pass.split(".")[0]) || Date.now() + 15 * 60 * 1000;
+    const sessionToken = pass;
+    const authorizedName = passInfo.name;
     const avatar = getAvatarForSession(sessionToken);
 
     // Compute display name & conditional discriminator if name collision exists
-    const assignedName = this.computeAssignedName(conn.id, sessionToken, sanitizedRawName);
+    const assignedName = this.computeAssignedName(conn.id, sessionToken, authorizedName);
 
     const clientState: ClientConnectionState = {
       sessionToken,
-      displayName: sanitizedRawName,
+      displayName: authorizedName,
       assignedName,
       avatar,
+      expiresAt: exp,
       messageTimestamps: [],
     };
 
@@ -171,6 +208,21 @@ export default class PortfolioChatServer {
       const data = JSON.parse(messageStr);
       const state = this.connectionStates.get(sender.id);
       if (!state) return;
+
+      // Check session expiration
+      if (Date.now() > state.expiresAt) {
+        sender.send(
+          JSON.stringify({
+            type: "error",
+            code: 403,
+            message: "Session expired. Please re-verify in Live Chat to continue.",
+          })
+        );
+        if (typeof sender.close === "function") {
+          sender.close(4403, "Session Expired");
+        }
+        return;
+      }
 
       if (data.type === "chat") {
         const rawText = data.text;
