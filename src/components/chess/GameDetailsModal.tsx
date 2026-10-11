@@ -93,10 +93,15 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
         <div className="custom-scrollbar max-h-[75vh] space-y-4 overflow-y-auto pr-1 font-sans text-xs">
           {/* Victory Header Alert if game finished */}
           {isGameOver && (
-            <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 p-3 text-center font-mono text-xs font-bold text-emerald-700 dark:text-emerald-300">
-              {gameState.outcome?.winner
-                ? `★ GAME OVER - TEAM ${gameState.outcome.winner.toUpperCase()} WINS BY CHECKMATE!`
-                : `★ GAME OVER - ${gameState.outcome?.type.toUpperCase() || "FINISHED"}`}
+            <div className="border-border-custom bg-surface-subtle border-structural flex flex-col items-center rounded-md p-3 text-center shadow-[2px_2px_0_var(--color-ink)]">
+              <span className="text-text-muted font-mono text-[10px] font-bold tracking-[0.14em] uppercase">
+                01 · Terminal Verdict
+              </span>
+              <h4 className="font-display text-text mt-0.5 text-sm font-bold sm:text-base">
+                {gameState.outcome?.winner
+                  ? `Team ${gameState.outcome.winner === "white" ? "White" : "Black"} Wins by Checkmate`
+                  : `Game Drawn — ${gameState.outcome?.type.toUpperCase() || "FINISHED"}`}
+              </h4>
             </div>
           )}
 

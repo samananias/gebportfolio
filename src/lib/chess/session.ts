@@ -1,5 +1,5 @@
-const SESSION_SECRET =
-  process.env.CHESS_SESSION_SECRET || "turn-arbiter-local-dev-secret-key-32bytes";
+import { getWorkersEnv } from "../bindings";
+
 const COOKIE_NAME = "chess_session";
 
 export interface SessionData {
@@ -8,6 +8,31 @@ export interface SessionData {
 }
 
 const encoder = new TextEncoder();
+
+/**
+ * Dynamically resolves the session HMAC secret from runtime bindings,
+ * locals, or TURNSTILE_SECRET fallback, failing closed in production.
+ */
+export async function getSessionSecret(locals?: App.Locals): Promise<string | null> {
+  if (locals?.CHESS_SESSION_SECRET) {
+    return locals.CHESS_SESSION_SECRET;
+  }
+  const env = await getWorkersEnv();
+  if (env?.CHESS_SESSION_SECRET) {
+    return env.CHESS_SESSION_SECRET as string;
+  }
+  if (locals?.TURNSTILE_SECRET) {
+    return locals.TURNSTILE_SECRET;
+  }
+  if (env?.TURNSTILE_SECRET) {
+    return env.TURNSTILE_SECRET as string;
+  }
+  // Allow fallback secret in local dev or automated Playwright test suites
+  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
+    return process.env.CHESS_SESSION_SECRET || "turn-arbiter-local-dev-secret-key-32bytes";
+  }
+  return null;
+}
 
 async function getHmacKey(secret: string): Promise<CryptoKey> {
   return await crypto.subtle.importKey(
@@ -22,9 +47,17 @@ async function getHmacKey(secret: string): Promise<CryptoKey> {
 /**
  * Sign session payload (sessionId + side) using Web Crypto HMAC-SHA256.
  */
-export async function signSession(sessionId: string, side: "white" | "black"): Promise<string> {
+export async function signSession(
+  sessionId: string,
+  side: "white" | "black",
+  locals?: App.Locals | string
+): Promise<string> {
+  const secret = typeof locals === "string" ? locals : await getSessionSecret(locals);
+  if (!secret) {
+    throw new Error("Chess session secret is not configured.");
+  }
   const payload = `${sessionId}:${side}`;
-  const key = await getHmacKey(SESSION_SECRET);
+  const key = await getHmacKey(secret);
   const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
   const hexSignature = Array.from(new Uint8Array(signatureBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -34,10 +67,11 @@ export async function signSession(sessionId: string, side: "white" | "black"): P
 
 /**
  * Verify signed session cookie value using Web Crypto.
- * Returns SessionData if valid, null if invalid or tampered.
+ * Returns SessionData if valid, null if invalid, tampered, or secret unconfigured.
  */
 export async function verifySession(
-  cookieValue: string | undefined | null
+  cookieValue: string | undefined | null,
+  locals?: App.Locals | string
 ): Promise<SessionData | null> {
   if (!cookieValue) return null;
 
@@ -53,7 +87,10 @@ export async function verifySession(
   const [sessionId, side] = parts;
   if (side !== "white" && side !== "black") return null;
 
-  const key = await getHmacKey(SESSION_SECRET);
+  const secret = typeof locals === "string" ? locals : await getSessionSecret(locals);
+  if (!secret) return null;
+
+  const key = await getHmacKey(secret);
   const expectedBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
   const expectedHex = Array.from(new Uint8Array(expectedBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))

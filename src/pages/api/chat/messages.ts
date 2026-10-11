@@ -107,7 +107,7 @@ export async function addChatMessage(locals: App.Locals, msg: ChatMessage): Prom
 // ---------------------------------------------------------------------------
 // Abuse guards (applied before spending a KV write)
 // ---------------------------------------------------------------------------
-const GLOBAL_MAX_PER_MINUTE = 15; // whole room, all senders
+const GLOBAL_MAX_PER_MINUTE = 45; // whole room, all senders (relaxed to support multi-user conversations)
 const SAME_SENDER_DUPE_WINDOW_MS = 60_000;
 const CROSS_SENDER_DUPE_WINDOW_MS = 10 * 60_000;
 const CROSS_SENDER_MIN_KEY_LENGTH = 12; // let short "hi"/"lol" repeat across people

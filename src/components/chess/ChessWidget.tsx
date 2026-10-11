@@ -6,6 +6,8 @@ import { type PublicGameState } from "./GameDetailsModal";
 import { showToast } from "../feedback/Toast";
 import { chessAudio } from "../../lib/chess/audio";
 import blunderRaw from "../../assets/chess-icons/blunder.svg?raw";
+import { PIECE_RAWS } from "./ChessPiece";
+import { DoodleIcon } from "../ui/DoodleIcon";
 
 export interface ChessWidgetProps {
   displayName?: string;
@@ -35,7 +37,15 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
     // Fetch current live game state from server
     const fetchState = async () => {
       try {
-        const res = await fetch("/api/chess/state");
+        const headers: Record<string, string> = {};
+        if (prevVersionRef.current !== null) {
+          headers["If-None-Match"] = `W/"chess-v${prevVersionRef.current}"`;
+        }
+        const res = await fetch("/api/chess/state", { headers });
+        if (res.status === 304) {
+          // Board state unchanged; preserve existing state without re-rendering
+          return;
+        }
         if (res.ok) {
           const data = (await res.json()) as PublicGameState;
           setGameState((prev) => {
@@ -58,8 +68,41 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
 
     useEffect(() => {
       fetchState();
-      const interval = setInterval(fetchState, 3000);
-      return () => clearInterval(interval);
+
+      let interval: NodeJS.Timeout | null = null;
+
+      const startPolling = () => {
+        if (!interval) {
+          interval = setInterval(fetchState, 5000);
+        }
+      };
+
+      const stopPolling = () => {
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      };
+
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          stopPolling();
+        } else {
+          fetchState();
+          startPolling();
+        }
+      };
+
+      if (!document.hidden) {
+        startPolling();
+      }
+
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        stopPolling();
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
     }, []);
 
     // Parse FEN string with chess.js for legal move generation & check detection (memoized)
@@ -233,7 +276,14 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
     const handleResetMatch = async () => {
       setIsSubmitting(true);
       try {
-        const res = await fetch("/api/chess/reset", { method: "POST" });
+        const pass =
+          typeof window !== "undefined"
+            ? window.sessionStorage.getItem("portfolio_chat_pass_v1") || ""
+            : "";
+        const res = await fetch("/api/chess/reset", {
+          method: "POST",
+          headers: pass ? { "x-chat-pass": pass } : {},
+        });
         const data = await res.json();
         if (res.ok && data.ok) {
           setGameState(data.state);
@@ -242,6 +292,8 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
           setPossibleMoves([]);
           setPendingPromotion(null);
           showToast(`New Match Started! You are Team ${data.state.yourSide.toUpperCase()}`);
+        } else if (data.requireTurnstile) {
+          showToast("Verification pass required to reset. Please solve Turnstile in Live Chat.");
         } else {
           showToast(`Reset failed: ${data.error || data.reason}`);
         }
@@ -263,40 +315,90 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
 
     return (
       <div className="flex h-full w-full flex-col items-center justify-center space-y-2">
-        {/* Checkmate Victory Banner or King in Check Alert Banner */}
+        {/* Checkmate Victory Plaque or King in Check Alert Banner */}
         {isGameOver ? (
-          <div className="animate-in fade-in zoom-in-95 flex flex-col items-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 p-3 font-mono text-xs font-bold text-emerald-700 shadow-md dark:text-emerald-300">
-            <span>
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="border-border-custom bg-surface animate-in fade-in zoom-in-95 border-structural relative z-20 flex w-full max-w-[340px] flex-col items-center rounded-md p-3.5 text-center shadow-[3px_3px_0_var(--color-ink)] transition-all sm:max-w-[360px]"
+          >
+            {/* Monastic Eyebrow */}
+            <div className="text-text-muted mb-2 flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.14em] uppercase">
+              <span className="bg-primary inline-block size-1.5 rounded-full" />
+              <span>01 · Terminal Verdict · {winner ? "Checkmate" : "Drawn Game"}</span>
+              <span className="bg-primary inline-block size-1.5 rounded-full" />
+            </div>
+
+            {/* Hand-carved Woodcut Standee Vector */}
+            <div className="my-1 flex items-center justify-center">
+              {winner ? (
+                <div
+                  className="text-text size-14 drop-shadow-none [&>svg]:size-full [&>svg]:object-contain"
+                  dangerouslySetInnerHTML={{
+                    __html: winner === "white" ? PIECE_RAWS.K : PIECE_RAWS.k,
+                  }}
+                  aria-hidden="true"
+                />
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="text-text size-11 [&>svg]:size-full [&>svg]:object-contain"
+                    dangerouslySetInnerHTML={{ __html: PIECE_RAWS.K }}
+                    aria-hidden="true"
+                  />
+                  <span className="text-text-muted font-mono text-xs">vs</span>
+                  <div
+                    className="text-text size-11 [&>svg]:size-full [&>svg]:object-contain"
+                    dangerouslySetInnerHTML={{ __html: PIECE_RAWS.k }}
+                    aria-hidden="true"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Display Headline in Fraunces serif */}
+            <h3 className="font-display text-text text-base font-bold tracking-tight sm:text-lg">
               {winner
-                ? `★ GAME OVER - TEAM ${winner.toUpperCase()} WINS BY CHECKMATE!`
-                : "★ GAME OVER - DRAW / STALEMATE!"}
-            </span>
-            <button
-              type="button"
-              onClick={handleResetMatch}
-              disabled={isSubmitting}
-              className="bg-primary hover:bg-primary/90 cursor-pointer rounded-lg px-3.5 py-1.5 font-mono text-xs font-semibold text-white shadow-xs transition-transform active:scale-95 disabled:opacity-50"
-            >
-              Start New Match
-            </button>
+                ? `Team ${winner === "white" ? "White" : "Black"} Claims Victory`
+                : "Drawn Game — Stalemate"}
+            </h3>
+
+            {/* Subtext description in Inter */}
+            <p className="text-text-muted mt-0.5 max-w-[280px] font-sans text-xs leading-normal">
+              {winner
+                ? "The opposing king has no legal escapes. The match concludes by decisive checkmate."
+                : "Neither side has sufficient material or legal moves. The board rests in balance."}
+            </p>
+
+            {/* Woodcut Tactile Action Button */}
+            <div className="mt-3 w-full">
+              <button
+                type="button"
+                onClick={handleResetMatch}
+                disabled={isSubmitting}
+                className="bg-primary border-border-custom hover:bg-primary-hover focus-visible:ring-focus border-structural flex w-full cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 font-mono text-xs font-bold tracking-wider text-white uppercase shadow-[2px_2px_0_var(--color-ink)] transition-all hover:-translate-x-[1px] hover:-translate-y-[1px] hover:shadow-[3px_3px_0_var(--color-ink)] focus-visible:ring-2 focus-visible:outline-none active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:pointer-events-none disabled:opacity-50"
+              >
+                <DoodleIcon name="arrows/arrow-circle-down" className="size-3.5 rotate-180" />
+                <span>{isSubmitting ? "Resetting Board..." : "Start New Match"}</span>
+              </button>
+            </div>
           </div>
         ) : (
           isCheck && (
             <div
-              className={`flex animate-bounce items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-xs font-bold shadow-md ${
-                isYourKingInCheck
-                  ? "border-rose-600 bg-rose-600 text-white"
-                  : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+              role="alert"
+              className={`border-border-custom bg-surface animate-in fade-in border-structural flex items-center gap-2 rounded-md px-3 py-1.5 font-mono text-xs font-bold shadow-[2px_2px_0_var(--color-ink)] ${
+                isYourKingInCheck ? "text-primary" : "text-text"
               }`}
             >
               <span
-                className="inline-flex size-4 shrink-0 items-center justify-center [&>svg]:h-full [&>svg]:w-full"
+                className="text-primary inline-flex size-4 shrink-0 items-center justify-center [&>svg]:size-full"
                 dangerouslySetInnerHTML={{ __html: blunderRaw }}
               />
-              <span>
+              <span className="tracking-wider uppercase">
                 {isYourKingInCheck
-                  ? "YOUR KING IS IN CHECK!"
-                  : `${checkedTeamName} King is in Check!`}
+                  ? "Alert · Your King is in Check!"
+                  : `Alert · ${checkedTeamName} King is in Check!`}
               </span>
             </div>
           )

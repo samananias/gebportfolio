@@ -14,10 +14,14 @@ import {
   COOKIE_NAME,
 } from "../../../lib/chess/session";
 import { getClientIp, isOriginAllowed, checkRateLimit } from "../../../lib/rateLimit";
+import { getTurnstileSecret, verifyChatPass, getCookie } from "../../../lib/turnstile";
+import { getChessOutcome } from "../../../lib/chess/outcome";
+import { invalidateStateCache } from "./state";
+import { invalidateArchiveCache } from "./archive";
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, cookies }) => {
+export const POST: APIRoute = async ({ request, cookies, locals }) => {
   try {
     // 1. Origin verification
     if (!isOriginAllowed(request)) {
@@ -50,8 +54,43 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       );
     }
 
+    // 3. Human verification pass (15-Minute session pass)
+    const turnstileSecret = await getTurnstileSecret(locals);
+    const providedPass = request.headers.get("x-chat-pass") || getCookie(request, "chat_pass");
+
+    let isPassValid = false;
+    if (providedPass) {
+      isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret);
+    }
+
+    const isDevOrTest = !import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1";
+    if (!isDevOrTest) {
+      if (!turnstileSecret) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            reason: "verification_unconfigured",
+            error: "Security verification service is temporarily unavailable.",
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!isPassValid) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            reason: "pass_required",
+            requireTurnstile: true,
+            error: "Verification pass required to reset match. Please verify in Live Chat.",
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const existingCookie = cookies.get(COOKIE_NAME)?.value;
-    const session = await verifySession(existingCookie);
+    const session = await verifySession(existingCookie, locals);
 
     if (!session) {
       return new Response(JSON.stringify({ ok: false, reason: "invalid_session" }), {
@@ -66,40 +105,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const game = await storage.getGame();
     if (!game) {
       return new Response(JSON.stringify({ ok: false, reason: "no_active_game" }), {
-        status: 400,
+        status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // Initialize arbiter to verify if game has actually reached an outcome
-    const arbiterCheck = createArbiter({
-      rules: chessRules,
-      now: Date.now(),
-      state: {
-        schemaVersion: 1,
-        version: game.version,
-        position: game.fen,
-        sideToMove: (game.fen.split(" ")[1] === "b" ? "black" : "white") as "white" | "black",
-        history: game.history,
-        positionKeys: game.positionKeys,
-        seenSessions: game.seenSessions || [],
-        contributors: game.contributors,
-        startedAt: game.lastMoveAt,
-        lastMoveAt: game.lastMoveAt,
-        outcome: null,
-      },
-    });
+    // Evaluate terminal outcome: checkmate, stalemate, repetition, 50-move, or insufficient material
+    const outcome = getChessOutcome(game.fen, game.history);
 
-    const publicView = arbiterCheck.publicView();
-
-    // 3. Prevent reset while game is actively in progress
-    // Match can ONLY be reset when checkmate, stalemate, or draw has occurred.
-    if (!publicView.outcome) {
+    if (!outcome) {
       return new Response(
         JSON.stringify({
           ok: false,
           reason: "game_in_progress",
-          error: "Match can only be reset once the game has concluded (checkmate or draw).",
+          error: "Cannot reset board while a match is in progress.",
         }),
         {
           status: 400,
@@ -108,36 +127,55 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       );
     }
 
-    // Archive completed game
-    if (game.history.length > 0) {
-      const pgn = game.history.join(" ");
-      const outcomeKind = publicView.outcome.kind || "draw";
-      await storage.archiveGame(pgn, outcomeKind, game.contributors);
+    // Double-check recent archives to prevent duplicate inserts if already archived on final move
+    const recentArchives = await storage.getArchivedGames(1);
+    const pgn = game.history.join(" ");
+    const alreadyArchived = recentArchives.length > 0 && recentArchives[0].pgn === pgn;
+
+    if (!alreadyArchived && pgn.length > 0) {
+      await storage.archiveGame(pgn, outcome.kind, game.contributors);
     }
 
-    // Create fresh game state, resetting match contributors to 0
+    // Reset game state back to starting position
     const resetState = {
-      version: 0,
+      version: game.version + 1,
       fen: INITIAL_FEN,
       history: [],
       positionKeys: [INITIAL_FEN.split(" ")[0]],
       contributors: 0,
       seenSessions: [],
-      allTimeContributors: game.allTimeContributors || 0,
+      allTimeContributors: (game.allTimeContributors || 0) + (game.contributors > 0 ? 1 : 0),
       lastMoveAt: new Date().toISOString(),
     };
 
-    // Save reset state with atomic CAS
     await storage.saveGame(game.version, resetState);
 
-    // Re-assign fresh team for the new match
-    const newSessionId = generateSessionId();
+    // Invalidate state and archive caches
+    invalidateStateCache();
+    invalidateArchiveCache();
+
+    // Re-assign player side for new match
     const freshArbiter = createArbiter({
       rules: chessRules,
       now: Date.now(),
+      state: {
+        schemaVersion: 1,
+        version: resetState.version,
+        position: resetState.fen,
+        sideToMove: "white",
+        history: [],
+        positionKeys: resetState.positionKeys,
+        seenSessions: [],
+        contributors: 0,
+        startedAt: resetState.lastMoveAt,
+        lastMoveAt: resetState.lastMoveAt,
+        outcome: null,
+      },
     });
+
+    const newSessionId = generateSessionId();
     const assignment = freshArbiter.assign({ sessionId: newSessionId });
-    const newCookieValue = await signSession(newSessionId, assignment.side);
+    const newCookieValue = await signSession(newSessionId, assignment.side, locals);
 
     const isSecure = import.meta.env.PROD && process.env.PLAYWRIGHT_E2E !== "1";
     cookies.set(COOKIE_NAME, newCookieValue, {
