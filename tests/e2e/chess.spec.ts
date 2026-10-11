@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { getChessOutcome } from "../../src/lib/chess/outcome";
 
 async function openChessModal(page: Page) {
   await page.waitForLoadState("domcontentloaded");
@@ -105,6 +106,41 @@ test.describe("Interactive Chess Game Board E2E Tests", () => {
     expect(result.data.reason).toBe("game_in_progress");
   });
 
+  test("should accurately detect checkmate and stalemate outcomes via getChessOutcome", () => {
+    // Active initial board
+    const initial = getChessOutcome("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    expect(initial).toBeNull();
+
+    // Fool's Mate checkmate (Black wins)
+    const foolsMate = getChessOutcome(
+      "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3",
+      ["f3", "e5", "g4", "Qh4#"]
+    );
+    expect(foolsMate).toEqual({
+      kind: "win",
+      winner: "black",
+      by: "checkmate",
+    });
+
+    // Scholar's Mate checkmate (White wins)
+    const scholarsMate = getChessOutcome(
+      "r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4",
+      ["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7#"]
+    );
+    expect(scholarsMate).toEqual({
+      kind: "win",
+      winner: "white",
+      by: "checkmate",
+    });
+
+    // Stalemate position (Draw)
+    const stalemate = getChessOutcome("k7/8/1Q6/8/8/8/8/7K b - - 0 1");
+    expect(stalemate).toEqual({
+      kind: "draw",
+      by: "stalemate",
+    });
+  });
+
   test("should render 3D piece standees and maintain interactive selection", async ({ page }) => {
     await openChessModal(page);
 
@@ -126,5 +162,29 @@ test.describe("Interactive Chess Game Board E2E Tests", () => {
 
     const labelBadge = page.locator(`text=Pawn on ${targetSquare}`);
     await expect(labelBadge).toBeVisible();
+  });
+
+  test("should return ETag and respond with 304 Not Modified on unchanged state", async ({
+    request,
+  }) => {
+    const res1 = await request.get("/api/chess/state");
+    expect(res1.ok()).toBeTruthy();
+    const etag = res1.headers()["etag"];
+    expect(etag).toBeTruthy();
+
+    const res2 = await request.get("/api/chess/state", {
+      headers: { "If-None-Match": etag },
+    });
+    expect(res2.status()).toBe(304);
+  });
+
+  test("should enforce rate limiting and 2s caching on GET /api/chess/archive", async ({
+    request,
+  }) => {
+    const res = await request.get("/api/chess/archive");
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(Array.isArray(body.archives)).toBe(true);
   });
 });

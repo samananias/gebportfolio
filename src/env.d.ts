@@ -43,5 +43,7 @@ declare namespace App {
     BREVO_API_KEY?: string;
     /** Cloudflare Turnstile verification secret (dashboard secret, not wrangler). */
     TURNSTILE_SECRET?: string;
+    /** Chess session signing secret (dashboard secret, not wrangler). */
+    CHESS_SESSION_SECRET?: string;
   }
 }

@@ -218,11 +218,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
+    const ALLOWED_AVATARS = new Set(["knight", "rook", "bishop", "pawn", "king", "queen"]);
+    const safeAvatar =
+      typeof avatar === "string" && ALLOWED_AVATARS.has(avatar.trim().toLowerCase())
+        ? avatar.trim().toLowerCase()
+        : "knight";
+
     const cleanText = sanitizeText(text);
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       sender: sanitizeText(sender).slice(0, 20),
-      avatar: (typeof avatar === "string" && avatar) || "knight",
+      avatar: safeAvatar,
       text: cleanText,
       timestamp: Date.now(),
     };

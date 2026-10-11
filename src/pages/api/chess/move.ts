@@ -10,6 +10,9 @@ import {
 import { verifySession, COOKIE_NAME } from "../../../lib/chess/session";
 import { getClientIp, isOriginAllowed, checkRateLimit } from "../../../lib/rateLimit";
 import { getTurnstileSecret, verifyChatPass, getCookie } from "../../../lib/turnstile";
+import { getChessOutcome } from "../../../lib/chess/outcome";
+import { invalidateStateCache } from "./state";
+import { invalidateArchiveCache } from "./archive";
 
 export const prerender = false;
 
@@ -58,25 +61,36 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret);
     }
 
-    // If turnstileSecret is configured and pass is invalid, require human pass
-    if (turnstileSecret && !isPassValid && process.env.PLAYWRIGHT_E2E !== "1") {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: "pass_required",
-          requireTurnstile: true,
-          error: "Verification pass required to make chess moves. Please verify in Live Chat.",
-        }),
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+    // Fail-closed bot defense outside dev/test environments
+    const isDevOrTest = !import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1";
+    if (!isDevOrTest) {
+      if (!turnstileSecret) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            reason: "verification_unconfigured",
+            error: "Security verification service is temporarily unavailable.",
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!isPassValid) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            reason: "pass_required",
+            requireTurnstile: true,
+            error: "Verification pass required to make chess moves. Please verify in Live Chat.",
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        );
+      }
     }
 
-    // Verify signed session cookie
+    // Verify signed session cookie with dynamic runtime secrets
     const existingCookie = cookies.get(COOKIE_NAME)?.value;
-    const session = await verifySession(existingCookie);
+    const session = await verifySession(existingCookie, locals);
 
     if (!session) {
       return new Response(JSON.stringify({ ok: false, reason: "invalid_session" }), {
@@ -115,6 +129,8 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       };
     }
 
+    const outcome = getChessOutcome(game.fen, game.history);
+
     // Initialize arbiter
     const arbiter = createArbiter({
       rules: chessRules,
@@ -130,7 +146,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         contributors: game.contributors,
         startedAt: game.lastMoveAt,
         lastMoveAt: game.lastMoveAt,
-        outcome: null,
+        outcome,
       },
     });
 
@@ -223,7 +239,11 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     if (result.outcome) {
       const pgn = serialized.history.join(" ");
       await storage.archiveGame(pgn, result.outcome.kind, result.state.contributors);
+      invalidateArchiveCache();
     }
+
+    // Invalidate in-memory isolate state cache so next GET /api/chess/state sees the new version
+    invalidateStateCache();
 
     const publicView = {
       ...arbiter.publicView({ historyLimit: 10 }),

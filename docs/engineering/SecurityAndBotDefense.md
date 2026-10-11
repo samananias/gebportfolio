@@ -20,6 +20,20 @@ This document describes the threat model, application-layer defenses, and operat
 3. **Move Spamming**:
    Fast multi-session script bots submitting moves in milliseconds without natural turn pacing.
 
+4. **Session Cookie Forgery & Side Arbitrage**:
+   Crafted `chess_session` cookies signed with legacy static keys allowing scripts to bypass team assignment and control both White and Black turns.
+
+5. **Unauthenticated Reset Flooding**:
+   Automated reset calls triggering unverified Cloudflare D1 writes upon match completion.
+
+6. **Unvalidated Chat Avatar Payload Bloat**:
+   High-byte string submissions in unconstrained parameters risking Cloudflare KV 25 MB value cap exhaustion.
+
+7. **Ungated KV Write Firehose on Telemetry (`POST /api/crop/usage`)**:
+   Unauthenticated POST requests performing 2 KV writes per call on `CHAT_KV` with zero Turnstile and zero origin check, burning the entire 1,000 writes/day free KV quota in 500 requests and knocking out Live Chat.
+
+See [0011 Security Hardening Specification](../plans/0011-live-chat-and-chess-security-hardening-specification.md) and [0011.1 Implementation Roadmap](../plans/0011.1-live-chat-and-chess-security-hardening-roadmap.md) for remediation milestones.
+
 ### Environmental Constraints
 
 The portfolio is served via a delegated community subdomain (`samananias.is-a.dev`). Because the root domain zone is managed externally, **Cloudflare Zone WAF and Bot Fight Mode are unavailable** in the account dashboard. Security controls must be enforced within the Worker application layer.
@@ -72,13 +86,38 @@ To protect Cloudflare KV write quotas from rapid automated spam, `addChatMessage
 3. **Cross-Sender Duplicate Flood Filter**: If messages matching identical normalized text (>= 12 characters) appear within 10 minutes across different senders, the message is silently dropped.
 4. **Silent Acceptance Semantics**: Dropped messages return an acceptance response to the client so bot scripts cannot detect filtering heuristics or calibrate timing to evade detection.
 
-### Layer 7: Short-Lived Isolate Read Cache (`src/pages/api/chat/messages.ts`)
+### Layer 7: Short-Lived Isolate Read Cache (`src/pages/api/chat/messages.ts` & `/api/chess/*`)
 
-To protect Cloudflare KV read quotas (100,000 reads/day) from high-frequency client polling, `GET /api/chat/messages` implements an in-memory 3-second isolate cache (`HISTORY_CACHE_TTL_MS = 3000`). Concurrent polling requests within the window are served directly from cache memory, evicting only on fresh posts.
+To protect Cloudflare KV read quotas (100,000 reads/day) and D1 row read quotas from high-frequency client polling:
 
-### Layer 8: Emergency Kill Switch (`CHAT_LOCKED`)
+- `GET /api/chat/messages` implements an in-memory 3-second isolate cache (`HISTORY_CACHE_TTL_MS = 3000`). Concurrent polling requests within the window are served directly from cache memory, evicting only on fresh posts.
+- `GET /api/chess/archive` and `GET /api/chess/state` implement in-memory 2-second isolate caches to collapse rapid multi-user read bursts before querying Cloudflare D1.
+
+### Layer 8: Client Lifecycle & Tab-Visibility Guards (`ChessWidget.tsx`)
+
+To prevent idle background tabs from consuming daily Worker request quotas:
+
+- Polling in `ChessWidget.tsx` attaches a `visibilitychange` listener and halts network traffic whenever `document.hidden === true`.
+- Normal steady-state polling interval is extended to 5.0 seconds (40% baseline reduction).
+
+### Layer 9: HTTP ETag / 304 Not Modified Caching (`src/pages/api/chess/state.ts`)
+
+Unchanged game states return lightweight HTTP 304 responses:
+
+- `GET /api/chess/state` computes a weak ETag based on `game.version` (`W/"chess-v${version}"`).
+- If the incoming client header `If-None-Match` matches, the Worker returns **HTTP 304 Not Modified** with an empty body, bypassing D1 read queries and chess arbiter CPU execution entirely.
+
+### Layer 10: Emergency Kill Switch (`CHAT_LOCKED`)
 
 During persistent bot floods or automated DDoS attacks, chat can be paused immediately without code deployments by setting environment variable `CHAT_LOCKED=1` in Cloudflare Variables and Secrets. When set, both `POST /api/chat/send` and `POST /api/chat/verify` return HTTP 503 (`Retry-After: 300`) with zero KV or Siteverify consumption.
+
+### Layer 11: Telemetry Isolation & Zero-KV-Write Policy (`/api/crop/usage`)
+
+To protect the shared 1,000 writes/day free KV quota from non-critical metric consumption:
+
+- `POST /api/crop/usage` enforces `isOriginAllowed(request)` and immediately rejects untrusted cross-origin and raw cURL callers with HTTP 403.
+- Rate limiting is decoupled from Cloudflare KV: `crop:rl:${ip}` counters run purely in-memory via `checkRateLimit` ($0 cost, 0 KV reads, 0 KV writes).
+- Per-event telemetry archival to `CHAT_KV` is eliminated to ensure non-essential metric bursts never exhaust write quotas required by Live Chat or Contact inbox delivery.
 
 ---
 
