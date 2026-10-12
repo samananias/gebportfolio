@@ -6,7 +6,7 @@ Personal portfolio for Sam Ananias Cases built with Astro (SSR on Cloudflare Wor
 
 - dev: `astro dev --background` (manage with `astro dev stop|status|logs`)
 - quick (each change): `npx pnpm run lint && npx pnpm run check`
-- full (before "done"): `npx pnpm run format && npx pnpm run lint && npx pnpm run check && npx pnpm run build && npx pnpm run test:e2e && npx pnpm run test:a11y`   # single test: `npx pnpm playwright test <path>`
+- full (before "done"): `npx pnpm run format && npx pnpm run lint && npx pnpm run check && npx pnpm run build && npx pnpm run test:e2e && npx pnpm run test:a11y` # single test: `npx pnpm playwright test <path>`
 - terminal (Windows): Use Git Bash directly. If executing in PowerShell, wrap commands with `cmd /c "<command>"`. Never use `cmd /c` inside Git Bash.
 
 ## Boundaries

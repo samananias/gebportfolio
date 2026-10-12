@@ -41,16 +41,13 @@ export const GET: APIRoute = async ({ request, cookies, locals }) => {
     });
 
     if (!rateCheck.allowed) {
-      return new Response(
-        JSON.stringify({ error: "Too many requests. Please slow down." }),
-        {
-          status: 429,
-          headers: {
-            "Content-Type": "application/json",
-            "Retry-After": String(Math.ceil((rateCheck.retryAfterMs || 2000) / 1000)),
-          },
-        }
-      );
+      return new Response(JSON.stringify({ error: "Too many requests. Please slow down." }), {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": String(Math.ceil((rateCheck.retryAfterMs || 2000) / 1000)),
+        },
+      });
     }
 
     // 3. Determine storage provider and fetch single authoritative game row from D1

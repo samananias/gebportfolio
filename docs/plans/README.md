@@ -62,5 +62,5 @@ For quick iteration, copy the standard template from [0000-template.md](0000-tem
 | `0010.1` | [Remove Background Redesign Roadmap & Checkpoints](0010.1-remove-background-redesign-roadmap.md)                                      | `Implemented` | 2026-09-18 |
 | `0011`   | [Live Chat & Collaborative Chess Security Hardening Specification](0011-live-chat-and-chess-security-hardening-specification.md)      | `Approved`    | 2026-10-09 |
 | `0011.1` | [Live Chat & Collaborative Chess Security Hardening Implementation Roadmap](0011.1-live-chat-and-chess-security-hardening-roadmap.md) | `Active`      | 2026-10-09 |
-| `0012`   | [Chess D1 Query De-amplification & Multiplayer Hardening Specification](0012-chess-d1-query-deamplification-specification.md)        | `Approved`    | 2026-10-12 |
-| `0012.1` | [Chess D1 Query De-amplification & Multiplayer Hardening Implementation Roadmap](0012.1-chess-d1-query-deamplification-roadmap.md)   | `Active`      | 2026-10-12 |
+| `0012`   | [Chess D1 Query De-amplification & Multiplayer Hardening Specification](0012-chess-d1-query-deamplification-specification.md)         | `Approved`    | 2026-10-12 |
+| `0012.1` | [Chess D1 Query De-amplification & Multiplayer Hardening Implementation Roadmap](0012.1-chess-d1-query-deamplification-roadmap.md)    | `Active`      | 2026-10-12 |

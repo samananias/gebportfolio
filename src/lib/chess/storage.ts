@@ -190,11 +190,7 @@ export async function ensureD1Tables(d1Binding: D1DatabaseBinding): Promise<void
         `INSERT OR IGNORE INTO game (id, version, fen, history, position_keys, contributors, seen_sessions, all_time_contributors, last_move_at)
          VALUES (1, 0, ?, '[]', ?, 0, '[]', 0, ?)`
       )
-      .bind(
-        INITIAL_FEN,
-        JSON.stringify([INITIAL_FEN.split(" ")[0]]),
-        new Date().toISOString()
-      )
+      .bind(INITIAL_FEN, JSON.stringify([INITIAL_FEN.split(" ")[0]]), new Date().toISOString())
       .run();
   } catch (e) {
     console.error("[D1 Auto-Schema Error]:", e);
