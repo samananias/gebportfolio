@@ -15,56 +15,68 @@ import {
   COOKIE_NAME,
 } from "../../../lib/chess/session";
 import { getChessOutcome } from "../../../lib/chess/outcome";
+import { getClientIp, isOriginAllowed, checkRateLimit } from "../../../lib/rateLimit";
 
 export const prerender = false;
 
-interface CachedStateEntry {
-  game: StoredGameState;
-  cachedAt: number;
-}
-
-let cachedGameState: CachedStateEntry | null = null;
-const STATE_CACHE_TTL_MS = 2000;
-
-/** Clears the in-memory state cache when a move or reset occurs */
-export function invalidateStateCache(): void {
-  cachedGameState = null;
-}
+/** Retained for API compatibility; isolate caching is removed to guarantee cross-isolate multiplayer consistency */
+export function invalidateStateCache(): void {}
 
 export const GET: APIRoute = async ({ request, cookies, locals }) => {
   try {
-    const now = Date.now();
-    let game: StoredGameState | null = null;
-
-    if (cachedGameState && now - cachedGameState.cachedAt < STATE_CACHE_TTL_MS) {
-      game = cachedGameState.game;
-    } else {
-      // Determine storage provider (D1 if available via Cloudflare runtime, otherwise Memory Fallback)
-      const envDB = await getD1Database();
-      const storage = envDB ? createD1StorageProvider(envDB) : memoryStorageProvider;
-
-      game = await storage.getGame();
-      if (!game) {
-        game = {
-          version: 0,
-          fen: INITIAL_FEN,
-          history: [],
-          positionKeys: [INITIAL_FEN.split(" ")[0]],
-          contributors: 0,
-          seenSessions: [],
-          allTimeContributors: 0,
-          lastMoveAt: new Date().toISOString(),
-        };
-        await storage.saveGame(0, game);
-      }
-      cachedGameState = { game, cachedAt: now };
+    // 1. Origin verification
+    if (!isOriginAllowed(request)) {
+      return new Response(JSON.stringify({ error: "Forbidden origin" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    // Verify existing session cookie with dynamic runtime secrets
+    // 2. Edge rate limiting: max 60 requests per 60s per IP (supports multiple players on same Wi-Fi)
+    const clientIp = getClientIp(request);
+    const rateCheck = checkRateLimit({
+      key: `chess:state:${clientIp}`,
+      maxRequests: 60,
+      windowMs: 60_000,
+    });
+
+    if (!rateCheck.allowed) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please slow down." }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(Math.ceil((rateCheck.retryAfterMs || 2000) / 1000)),
+          },
+        }
+      );
+    }
+
+    // 3. Determine storage provider and fetch single authoritative game row from D1
+    const envDB = await getD1Database(locals);
+    const storage = envDB ? createD1StorageProvider(envDB) : memoryStorageProvider;
+
+    let game: StoredGameState | null = await storage.getGame();
+    if (!game) {
+      game = {
+        version: 0,
+        fen: INITIAL_FEN,
+        history: [],
+        positionKeys: [INITIAL_FEN.split(" ")[0]],
+        contributors: 0,
+        seenSessions: [],
+        allTimeContributors: 0,
+        lastMoveAt: new Date().toISOString(),
+      };
+      await storage.saveGame(0, game);
+    }
+
+    // 4. Verify existing session cookie with dynamic runtime secrets
     const existingCookie = cookies.get(COOKIE_NAME)?.value;
     let session = await verifySession(existingCookie, locals);
 
-    // Evaluate HTTP 304 Not Modified if client holds current game version
+    // 5. Evaluate HTTP 304 Not Modified if client holds current game version
     const etag = `W/"chess-v${game.version}"`;
     const clientEtag = request.headers.get("if-none-match");
 
@@ -137,9 +149,7 @@ export const GET: APIRoute = async ({ request, cookies, locals }) => {
       headers: {
         "Content-Type": "application/json",
         ETag: etag,
-        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
-        "CDN-Cache-Control": "no-store",
-        "Cloudflare-CDN-Cache-Control": "no-store",
+        "Cache-Control": "no-cache",
       },
     });
   } catch (error) {
