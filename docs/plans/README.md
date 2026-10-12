@@ -37,30 +37,32 @@ For quick iteration, copy the standard template from [0000-template.md](0000-tem
 
 ## Index of Plans
 
-| ID       | Title                                                                                                                                 | Status        | Date       |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------- |
-| `0000`   | [Standard Feature Plan Template](0000-template.md)                                                                                    | `Active`      | 2026-07-24 |
-| `0001`   | [Home Page IA & Content Specification](0001-home-page-specification.md)                                                               | `Approved`    | 2026-07-24 |
-| `0001.1` | [Home Page Implementation Roadmap & Checkpoints](0001.1-home-page-implementation-roadmap.md)                                          | `Implemented` | 2026-07-24 |
-| `0002`   | [Work Page IA & Content Specification](0002-work-page-specification.md)                                                               | `Approved`    | 2026-07-25 |
-| `0002.1` | [Work Page Implementation Roadmap & Checkpoints](0002.1-work-page-implementation-roadmap.md)                                          | `Active`      | 2026-07-25 |
-| `0003`   | [Anonymous Real-Time Chatbox Architecture & Design Specification](0003-anonymous-realtime-chatbox-specification.md)                   | `Approved`    | 2026-07-27 |
-| `0003.1` | [Anonymous Real-Time Chatbox Implementation Roadmap & Checkpoints](0003.1-anonymous-realtime-chatbox-implementation-roadmap.md)       | `Implemented` | 2026-07-27 |
-| `0004`   | [Anonymous Shared Chess Game Architecture & Specification](0004-anonymous-shared-chess-game-specification.md)                         | `Approved`    | 2026-07-28 |
-| `0004.1` | [Anonymous Shared Chess Game Implementation Roadmap & Checkpoints](0004.1-anonymous-shared-chess-game-implementation-roadmap.md)      | `Active`      | 2026-07-28 |
-| `0004.2` | [Chess Checkmate Handling, Match Reset & Pawn Promotion Specification](0004.2-chess-checkmate-and-pawn-promotion-plan.md)             | `Approved`    | 2026-08-13 |
-| `0004.3` | [Chess Checkmate, Pawn Promotion & Contributor Tracking Implementation Roadmap](0004.3-chess-checkmate-and-promotion-roadmap.md)      | `Active`      | 2026-08-13 |
-| `0005`   | [Experience Page Architecture, Schema & Content Specification](0005-experience-page-specification.md)                                 | `Approved`    | 2026-07-31 |
-| `0006`   | [ID Photo Studio Specification](0006-id-photo-studio-specification.md)                                                                | `Draft`       | 2026-09-10 |
-| `0006.1` | [ID Photo Studio Backend Roadmap & Checkpoints](0006.1-id-photo-studio-backend-roadmap.md)                                            | `Draft`       | 2026-09-10 |
-| `0007`   | [Image Editing Improvements](0007-image-editing-improvements.md)                                                                      | `Draft`       | 2026-09-11 |
-| `0007.1` | [Image Editing Improvements Roadmap & Checkpoints](0007.1-image-editing-roadmap.md)                                                   | `Draft`       | 2026-09-11 |
-| `0008`   | [Lab Ledger & Entry Records Specification](0008-lab-ledger-specification.md)                                                          | `In Progress` | 2026-09-15 |
-| `0009`   | [Crop Page Redesign — Two-Mode ID Photo Studio](0009-crop-page-redesign-specification.md)                                             | `In Progress` | 2026-09-15 |
-| `0009.1` | [Crop Page Redesign Roadmap & Checkpoints](0009.1-crop-page-redesign-roadmap.md)                                                      | `In Progress` | 2026-09-15 |
-| `0010`   | [Remove Background Page Redesign — Crop Studio Parity](0010-remove-background-redesign-specification.md)                              | `Implemented` | 2026-09-18 |
-| `0010.1` | [Remove Background Redesign Roadmap & Checkpoints](0010.1-remove-background-redesign-roadmap.md)                                      | `Implemented` | 2026-09-18 |
-| `0011`   | [Live Chat & Collaborative Chess Security Hardening Specification](0011-live-chat-and-chess-security-hardening-specification.md)      | `Approved`    | 2026-10-09 |
-| `0011.1` | [Live Chat & Collaborative Chess Security Hardening Implementation Roadmap](0011.1-live-chat-and-chess-security-hardening-roadmap.md) | `Active`      | 2026-10-09 |
-| `0012`   | [Chess D1 Query De-amplification & Multiplayer Hardening Specification](0012-chess-d1-query-deamplification-specification.md)         | `Approved`    | 2026-10-12 |
-| `0012.1` | [Chess D1 Query De-amplification & Multiplayer Hardening Implementation Roadmap](0012.1-chess-d1-query-deamplification-roadmap.md)    | `Active`      | 2026-10-12 |
+| ID       | Title                                                                                                                                      | Status        | Date       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------- | ---------- |
+| `0000`   | [Standard Feature Plan Template](0000-template.md)                                                                                         | `Active`      | 2026-07-24 |
+| `0001`   | [Home Page IA & Content Specification](0001-home-page-specification.md)                                                                    | `Approved`    | 2026-07-24 |
+| `0001.1` | [Home Page Implementation Roadmap & Checkpoints](0001.1-home-page-implementation-roadmap.md)                                               | `Implemented` | 2026-07-24 |
+| `0002`   | [Work Page IA & Content Specification](0002-work-page-specification.md)                                                                    | `Approved`    | 2026-07-25 |
+| `0002.1` | [Work Page Implementation Roadmap & Checkpoints](0002.1-work-page-implementation-roadmap.md)                                               | `Active`      | 2026-07-25 |
+| `0003`   | [Anonymous Real-Time Chatbox Architecture & Design Specification](0003-anonymous-realtime-chatbox-specification.md)                        | `Approved`    | 2026-07-27 |
+| `0003.1` | [Anonymous Real-Time Chatbox Implementation Roadmap & Checkpoints](0003.1-anonymous-realtime-chatbox-implementation-roadmap.md)            | `Implemented` | 2026-07-27 |
+| `0004`   | [Anonymous Shared Chess Game Architecture & Specification](0004-anonymous-shared-chess-game-specification.md)                              | `Approved`    | 2026-07-28 |
+| `0004.1` | [Anonymous Shared Chess Game Implementation Roadmap & Checkpoints](0004.1-anonymous-shared-chess-game-implementation-roadmap.md)           | `Active`      | 2026-07-28 |
+| `0004.2` | [Chess Checkmate Handling, Match Reset & Pawn Promotion Specification](0004.2-chess-checkmate-and-pawn-promotion-plan.md)                  | `Approved`    | 2026-08-13 |
+| `0004.3` | [Chess Checkmate, Pawn Promotion & Contributor Tracking Implementation Roadmap](0004.3-chess-checkmate-and-promotion-roadmap.md)           | `Active`      | 2026-08-13 |
+| `0005`   | [Experience Page Architecture, Schema & Content Specification](0005-experience-page-specification.md)                                      | `Approved`    | 2026-07-31 |
+| `0006`   | [ID Photo Studio Specification](0006-id-photo-studio-specification.md)                                                                     | `Draft`       | 2026-09-10 |
+| `0006.1` | [ID Photo Studio Backend Roadmap & Checkpoints](0006.1-id-photo-studio-backend-roadmap.md)                                                 | `Draft`       | 2026-09-10 |
+| `0007`   | [Image Editing Improvements](0007-image-editing-improvements.md)                                                                           | `Draft`       | 2026-09-11 |
+| `0007.1` | [Image Editing Improvements Roadmap & Checkpoints](0007.1-image-editing-roadmap.md)                                                        | `Draft`       | 2026-09-11 |
+| `0008`   | [Lab Ledger & Entry Records Specification](0008-lab-ledger-specification.md)                                                               | `In Progress` | 2026-09-15 |
+| `0009`   | [Crop Page Redesign — Two-Mode ID Photo Studio](0009-crop-page-redesign-specification.md)                                                  | `In Progress` | 2026-09-15 |
+| `0009.1` | [Crop Page Redesign Roadmap & Checkpoints](0009.1-crop-page-redesign-roadmap.md)                                                           | `In Progress` | 2026-09-15 |
+| `0010`   | [Remove Background Page Redesign — Crop Studio Parity](0010-remove-background-redesign-specification.md)                                   | `Implemented` | 2026-09-18 |
+| `0010.1` | [Remove Background Redesign Roadmap & Checkpoints](0010.1-remove-background-redesign-roadmap.md)                                           | `Implemented` | 2026-09-18 |
+| `0011`   | [Live Chat & Collaborative Chess Security Hardening Specification](0011-live-chat-and-chess-security-hardening-specification.md)           | `Approved`    | 2026-10-09 |
+| `0011.1` | [Live Chat & Collaborative Chess Security Hardening Implementation Roadmap](0011.1-live-chat-and-chess-security-hardening-roadmap.md)      | `Active`      | 2026-10-09 |
+| `0012`   | [Chess D1 Query De-amplification & Multiplayer Hardening Specification](0012-chess-d1-query-deamplification-specification.md)              | `Approved`    | 2026-10-12 |
+| `0012.1` | [Chess D1 Query De-amplification & Multiplayer Hardening Implementation Roadmap](0012.1-chess-d1-query-deamplification-roadmap.md)         | `Active`      | 2026-10-12 |
+| `0013`   | [Quota Consumption & Verification Boundaries Hardening Specification](0013-quota-consumption-and-verification-boundaries-specification.md) | `Approved`    | 2026-10-12 |
+| `0013.1` | [Quota Consumption & Verification Boundaries Hardening Roadmap](0013.1-quota-consumption-and-verification-boundaries-roadmap.md)           | `Active`      | 2026-10-12 |

@@ -2,6 +2,11 @@ import { getWorkersEnv } from "./bindings";
 
 export * from "./turnstileConstants";
 
+/**
+ * 15-Minute Human Chat Pass lifetime in milliseconds.
+ */
+export const CHAT_PASS_TTL_MS = 15 * 60 * 1000;
+
 export interface VerifyTurnstileOptions {
   token: unknown;
   secret: string | null | undefined;
@@ -22,6 +27,16 @@ const PROD_ALLOWED_HOSTNAMES = new Set([
 ]);
 
 const DEV_ALLOWED_HOSTNAMES = new Set([...PROD_ALLOWED_HOSTNAMES, "localhost", "127.0.0.1"]);
+
+/**
+ * Checks whether an incoming request hostname corresponds to a local development machine.
+ * Strips port numbers and lowercases before comparison.
+ */
+export function isLocalRequestHost(host: string | null | undefined): boolean {
+  if (!host) return false;
+  const clean = host.toLowerCase().split(":")[0].trim();
+  return clean === "localhost" || clean === "127.0.0.1";
+}
 
 /**
  * Checks if a hostname belongs to a Cloudflare Pages or Workers preview deployment.
@@ -63,12 +78,26 @@ export function clearRedeemedTokensCache(): void {
 }
 
 /**
+ * Determines whether the current environment allows dev/test bypasses.
+ * When a hostname is provided, it strictly requires the host to be local.
+ */
+export function isDevOrTest(host?: string | null): boolean {
+  if (import.meta.env?.PROD && process.env.PLAYWRIGHT_E2E !== "1") {
+    return false;
+  }
+  if (host !== undefined && host !== null) {
+    return isLocalRequestHost(host);
+  }
+  return true;
+}
+
+/**
  * Validates a Turnstile cf-turnstile-response token server-side via siteverify.
  */
 export async function verifyTurnstileToken(
   options: VerifyTurnstileOptions
 ): Promise<VerifyTurnstileResult> {
-  const { token, secret, clientIp, expectedAction } = options;
+  const { token, secret, clientIp, expectedAction, requestHostname } = options;
 
   // Token shape validation (1 to 2048 non-whitespace characters)
   if (typeof token !== "string" || token.trim().length === 0 || token.length > 2048) {
@@ -78,8 +107,14 @@ export async function verifyTurnstileToken(
     };
   }
 
-  // In test/local environments, permit requests if no secret is configured or during Playwright runs
-  if (!import.meta.env?.PROD || process.env.PLAYWRIGHT_E2E === "1") {
+  // In test/local environments, permit requests if no secret is configured or during Playwright runs,
+  // strictly requiring the request host to be local (localhost / 127.0.0.1).
+  const isLocal =
+    requestHostname !== undefined && requestHostname !== null
+      ? isLocalRequestHost(requestHostname)
+      : !import.meta.env?.PROD;
+
+  if ((!import.meta.env?.PROD || process.env.PLAYWRIGHT_E2E === "1") && isLocal) {
     if (!secret || token === "dummy-test-token") {
       return { success: true };
     }
@@ -109,92 +144,96 @@ export async function verifyTurnstileToken(
     };
   }
 
+  // Call Cloudflare Siteverify API
   try {
-    const formData = new URLSearchParams({
-      secret,
-      response: token.trim(),
-    });
-
+    const formData = new URLSearchParams();
+    formData.append("secret", secret);
+    formData.append("response", trimmedToken);
     if (clientIp) {
       formData.append("remoteip", clientIp);
     }
 
-    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: formData,
-      signal: AbortSignal.timeout(10_000),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
     });
 
-    if (!response.ok) {
-      console.error(`[Turnstile siteverify HTTP Error]: ${response.status}`);
-      return { success: false, error: "Verification server failed." };
+    if (!res.ok) {
+      return {
+        success: false,
+        error: "Security verification service unreachable. Please try again.",
+      };
     }
 
-    const result = (await response.json()) as {
-      success?: boolean;
+    const data = (await res.json()) as {
+      success: boolean;
       action?: string;
+      cdata?: string;
       hostname?: string;
       "error-codes"?: string[];
     };
 
-    if (!result.success) {
-      console.warn("[Turnstile Validation Failed]:", result["error-codes"]);
-      const isDuplicateOrTimeout = result["error-codes"]?.some(
-        (code) => code.includes("duplicate") || code.includes("timeout")
-      );
+    if (!data.success) {
+      const errorCodes = data["error-codes"] || [];
+      const errorMsg =
+        errorCodes.includes("timeout-or-duplicate") || errorCodes.includes("invalid-input-response")
+          ? "Security verification token is already redeemed or expired. Please solve a fresh challenge."
+          : "Bot verification failed. Please try again.";
+
       return {
         success: false,
-        error: isDuplicateOrTimeout
-          ? "Security verification token is already redeemed or expired. Please solve a fresh challenge."
-          : "Bot verification failed. Please try again.",
+        error: errorMsg,
       };
     }
 
-    const isActionMatch =
-      !result.action ||
-      result.action === expectedAction ||
-      ((expectedAction === "chat" || expectedAction === "live") &&
-        (result.action === "chat" || result.action === "live"));
-
-    if (!isActionMatch) {
-      console.warn(`[Turnstile Action Mismatch]: expected ${expectedAction}, got ${result.action}`);
+    // Verify expectedAction
+    if (expectedAction && data.action && data.action !== expectedAction) {
       return {
         success: false,
         error: "Verification action mismatch.",
       };
     }
 
-    const isProd = Boolean(import.meta.env?.PROD) && process.env.PLAYWRIGHT_E2E !== "1";
-    const allowed = isProd ? PROD_ALLOWED_HOSTNAMES : DEV_ALLOWED_HOSTNAMES;
+    // Strict hostname verification
+    if (data.hostname) {
+      const siteverifyHost = data.hostname.toLowerCase();
+      const isProd = Boolean(import.meta.env?.PROD) && process.env.PLAYWRIGHT_E2E !== "1";
+      const allowed = isProd ? PROD_ALLOWED_HOSTNAMES : DEV_ALLOWED_HOSTNAMES;
+      const isAllowed = allowed.has(siteverifyHost) || isPreviewHostname(siteverifyHost);
 
-    const isHostnameAllowed =
-      result.hostname &&
-      (allowed.has(result.hostname) || result.hostname.endsWith(".gebportfolio.pages.dev"));
-
-    if (!isHostnameAllowed) {
-      console.warn(`[Turnstile Hostname Mismatch]: untrusted host ${result.hostname}`);
-      return {
-        success: false,
-        error: "Verification hostname mismatch.",
-      };
+      if (!isAllowed) {
+        return {
+          success: false,
+          error: "Verification hostname mismatch.",
+        };
+      }
     }
 
+    // Mark token as redeemed
     redeemedTurnstileTokens.set(trimmedToken, Date.now());
+
+    // Prune stale cache entries
+    if (redeemedTurnstileTokens.size > 1000) {
+      const now = Date.now();
+      for (const [k, v] of redeemedTurnstileTokens.entries()) {
+        if (now - v >= REPLAY_CACHE_TTL_MS) {
+          redeemedTurnstileTokens.delete(k);
+        }
+      }
+    }
+
     return { success: true };
   } catch (err) {
-    console.error("[Turnstile Network Error]:", err);
+    console.error("[Turnstile Verification Exception]:", err);
     return {
       success: false,
-      error: "Verification challenge could not be reached.",
+      error: "An unexpected error occurred during security verification.",
     };
   }
 }
-
-/**
- * 15-Minute Human Chat Pass lifetime in milliseconds.
- */
-export const CHAT_PASS_TTL_MS = 15 * 60 * 1000;
 
 /**
  * Extracts a cookie value by name from incoming Request headers.
@@ -204,10 +243,6 @@ export function getCookie(request: Request, name: string): string | null {
   if (!cookieHeader) return null;
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
-}
-
-function isDevOrTest(): boolean {
-  return !import.meta.env?.PROD || process.env.PLAYWRIGHT_E2E === "1";
 }
 
 function nameToHex(name: string): string {
@@ -240,20 +275,20 @@ async function hmacKey(secret: string, usage: "sign" | "verify"): Promise<Crypto
 /**
  * Issues an HMAC-SHA256 signed chat pass bound to the client IP, the chosen
  * display name, and the expiry. Format: `<exp>.<nameHex>.<signature>`.
- * Because the name is signed, one Turnstile solve can only post as ONE identity.
  */
 export async function issueChatPass(
   clientIp: string,
   secret: string | null | undefined,
   ttlMs = CHAT_PASS_TTL_MS,
-  name = ""
+  name = "",
+  requestHostname?: string | null
 ): Promise<string> {
   const exp = Date.now() + ttlMs;
   const nameHex = nameToHex(name);
 
   if (!secret) {
-    // Never mint passes without a secret in production.
-    if (!isDevOrTest()) throw new Error("TURNSTILE_SECRET is not configured");
+    // Never mint passes without a secret in production or for remote hosts
+    if (!isDevOrTest(requestHostname)) throw new Error("TURNSTILE_SECRET is not configured");
     return `${exp}.${nameHex}.preview-test-pass`;
   }
 
@@ -276,12 +311,13 @@ export interface ChatPassInfo {
 /**
  * Verifies a chat pass (unexpired, authentic, bound to this IP) and returns the
  * display name it was issued for. Fails closed when no secret is configured
- * (outside dev/test). Legacy 2-part passes are rejected.
+ * (outside dev/test on local host). Legacy 2-part passes are rejected.
  */
 export async function verifyChatPassDetailed(
   pass: unknown,
   clientIp: string,
-  secret: string | null | undefined
+  secret: string | null | undefined,
+  requestHostname?: string | null
 ): Promise<ChatPassInfo> {
   if (typeof pass !== "string") return { valid: false };
   const parts = pass.split(".");
@@ -294,7 +330,7 @@ export async function verifyChatPassDetailed(
   const name = hexToName(nameHex);
   if (name === null) return { valid: false };
 
-  if (isDevOrTest()) {
+  if (isDevOrTest(requestHostname)) {
     if (!secret || sigBase64 === "dev-test-pass" || sigBase64 === "preview-test-pass") {
       return { valid: true, name };
     }
@@ -318,9 +354,10 @@ export async function verifyChatPassDetailed(
 export async function verifyChatPass(
   pass: unknown,
   clientIp: string,
-  secret: string | null | undefined
+  secret: string | null | undefined,
+  requestHostname?: string | null
 ): Promise<boolean> {
-  return (await verifyChatPassDetailed(pass, clientIp, secret)).valid;
+  return (await verifyChatPassDetailed(pass, clientIp, secret, requestHostname)).valid;
 }
 
 export interface ChatSessionResult {
@@ -339,9 +376,10 @@ export async function issueChatSession(
   name: string,
   clientIp: string,
   secret: string | null | undefined,
-  ttlMs = CHAT_PASS_TTL_MS
+  ttlMs = CHAT_PASS_TTL_MS,
+  requestHostname?: string | null
 ): Promise<string> {
-  return issueChatPass(clientIp, secret, ttlMs, name);
+  return issueChatPass(clientIp, secret, ttlMs, name, requestHostname);
 }
 
 /** Wrapper verifying chat pass and returning session payload. */
@@ -349,7 +387,8 @@ export async function verifyChatSession(
   pass: unknown,
   expectedName: string,
   clientIp: string,
-  secret: string | null | undefined
+  secret: string | null | undefined,
+  requestHostname?: string | null
 ): Promise<ChatSessionResult> {
   if (typeof pass !== "string") {
     return { valid: false, error: "Invalid session credential format" };
@@ -362,7 +401,7 @@ export async function verifyChatSession(
   if (!exp || Number.isNaN(exp) || Date.now() > exp) {
     return { valid: false, error: "Session credential has expired. Please re-verify." };
   }
-  const info = await verifyChatPassDetailed(pass, clientIp, secret);
+  const info = await verifyChatPassDetailed(pass, clientIp, secret, requestHostname);
   if (!info.valid) {
     return { valid: false, error: "Invalid session signature or forged credential." };
   }

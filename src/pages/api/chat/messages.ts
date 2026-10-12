@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { getWorkersEnv } from "../../../lib/bindings";
+import { getClientIp, checkRateLimit } from "../../../lib/rateLimit";
 
 export const prerender = false;
 
@@ -165,7 +166,25 @@ export async function addChatMessageGuarded(
 let historyCache: { at: number; data: ChatMessage[] } | null = null;
 const HISTORY_CACHE_TTL_MS = 3000;
 
-export const GET: APIRoute = async ({ locals }) => {
+export const GET: APIRoute = async ({ request, locals }) => {
+  const clientIp = getClientIp(request);
+  const rateCheck = checkRateLimit({
+    key: `chat:messages:${clientIp}`,
+    maxRequests: 60,
+    windowMs: 60_000,
+    forceEnforce: true,
+  });
+
+  if (!rateCheck.allowed) {
+    return new Response(JSON.stringify({ error: "Too many requests. Please slow down." }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(Math.ceil((rateCheck.retryAfterMs || 2000) / 1000)),
+      },
+    });
+  }
+
   const now = Date.now();
   let messages: ChatMessage[];
   if (historyCache && now - historyCache.at < HISTORY_CACHE_TTL_MS) {

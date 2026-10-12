@@ -37,7 +37,8 @@ Because these endpoints (`/api/chat/send`, `/api/chess/move`, and `/api/chess/re
 
 4. **Origin & CSRF Header Verification:**
    - Mutating POST routes verify that the `Origin` or `Referer` matches the portfolio domain or `Sec-Fetch-Site` is `same-origin`.
-   - Drops off-site automated cURL / Python scripts.
+   - Drops off-site cross-origin browser requests (CSRF defense).
+   - _(Correction Note, 2026-10-12): The initial claim that this check "drops off-site automated cURL / Python scripts" was technically inaccurate. HTTP scripts outside the browser can forge `Origin` and `Referer` headers arbitrarily. Origin validation provides browser CSRF hygiene; actual anti-bot verification relies strictly on Cloudflare Turnstile token validation and rate limits._
 
 5. **Honeypot Traps:**
    - Checks invisible `website` and `_hp` payload fields. Automated scrapers populating these fields are silently dropped with HTTP 200 without writing to storage.

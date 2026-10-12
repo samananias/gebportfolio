@@ -3,6 +3,8 @@ import {
   verifyTurnstileToken,
   issueChatSession,
   verifyChatSession,
+  verifyChatPassDetailed,
+  isLocalRequestHost,
   clearRedeemedTokensCache,
 } from "../../src/lib/turnstile";
 import { checkRateLimit, clearRateLimitStore } from "../../src/lib/rateLimit";
@@ -523,6 +525,84 @@ test.describe("Turnstile & Chat Security Boundaries", () => {
       expect(parsedB.valid).toBe(true);
       // Distinct unique session IDs ensure session-level rate limit keys do not cross-contaminate
       expect(parsedA.payload?.sessionId).not.toBe(parsedB.payload?.sessionId);
+    });
+  });
+
+  test.describe("5. Localhost Isolation for Test Bypasses", () => {
+    test("isLocalRequestHost accurately identifies local vs remote hostnames", () => {
+      expect(isLocalRequestHost("localhost")).toBe(true);
+      expect(isLocalRequestHost("localhost:4321")).toBe(true);
+      expect(isLocalRequestHost("127.0.0.1")).toBe(true);
+      expect(isLocalRequestHost("127.0.0.1:8787")).toBe(true);
+      expect(isLocalRequestHost("samananias.is-a.dev")).toBe(false);
+      expect(isLocalRequestHost("gebportfolio.pages.dev")).toBe(false);
+      expect(isLocalRequestHost("malicious.site.com")).toBe(false);
+      expect(isLocalRequestHost("")).toBe(false);
+      expect(isLocalRequestHost(undefined)).toBe(false);
+    });
+
+    test("dummy-test-token verifies ONLY on local hosts and is rejected for production hostnames", async () => {
+      // Local host with dummy token -> succeeds in dev/test
+      const localRes = await verifyTurnstileToken({
+        token: "dummy-test-token",
+        secret: "test-secret",
+        expectedAction: "contact",
+        requestHostname: "localhost",
+      });
+      expect(localRes.success).toBe(true);
+
+      const ipLocalRes = await verifyTurnstileToken({
+        token: "dummy-test-token",
+        secret: "test-secret",
+        expectedAction: "contact",
+        requestHostname: "127.0.0.1:4321",
+      });
+      expect(ipLocalRes.success).toBe(true);
+
+      // Production host with dummy token -> fails closed / rejected at siteverify boundary
+      const prodRes = await verifyTurnstileToken({
+        token: "dummy-test-token",
+        secret: "test-secret",
+        expectedAction: "contact",
+        requestHostname: "samananias.is-a.dev",
+      });
+      expect(prodRes.success).toBe(false);
+
+      const pagesRes = await verifyTurnstileToken({
+        token: "dummy-test-token",
+        secret: "test-secret",
+        expectedAction: "contact",
+        requestHostname: "gebportfolio.pages.dev",
+      });
+      expect(pagesRes.success).toBe(false);
+    });
+
+    test("forged preview-test-pass chat pass is accepted locally but rejected for remote hostnames", async () => {
+      const exp = Date.now() + 60_000;
+      const forgedPass = `${exp}.53616d.preview-test-pass`; // "Sam" in hex
+      const clientIp = "127.0.0.1";
+
+      // On localhost: test pass is accepted during dev/test
+      const localResult = await verifyChatPassDetailed(forgedPass, clientIp, null, "localhost");
+      expect(localResult.valid).toBe(true);
+      expect(localResult.name).toBe("Sam");
+
+      // On production hostname: test pass signature is strictly rejected
+      const prodResult = await verifyChatPassDetailed(
+        forgedPass,
+        clientIp,
+        null,
+        "samananias.is-a.dev"
+      );
+      expect(prodResult.valid).toBe(false);
+
+      const pagesResult = await verifyChatPassDetailed(
+        forgedPass,
+        clientIp,
+        null,
+        "gebportfolio.pages.dev"
+      );
+      expect(pagesResult.valid).toBe(false);
     });
   });
 });

@@ -9,7 +9,12 @@ import {
 } from "../../../lib/chess/storage";
 import { verifySession, COOKIE_NAME } from "../../../lib/chess/session";
 import { getClientIp, isOriginAllowed, checkRateLimit } from "../../../lib/rateLimit";
-import { getTurnstileSecret, verifyChatPass, getCookie } from "../../../lib/turnstile";
+import {
+  getTurnstileSecret,
+  verifyChatPass,
+  getCookie,
+  isLocalRequestHost,
+} from "../../../lib/turnstile";
 import { getChessOutcome } from "../../../lib/chess/outcome";
 import { invalidateStateCache } from "./state";
 import { invalidateArchiveCache } from "./archive";
@@ -55,14 +60,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     // 3. Human verification pass (15-Minute session pass)
     const turnstileSecret = await getTurnstileSecret(locals);
     const providedPass = request.headers.get("x-chat-pass") || getCookie(request, "chat_pass");
+    const requestHost = request.headers.get("host") || new URL(request.url).host;
 
     let isPassValid = false;
     if (providedPass) {
-      isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret);
+      isPassValid = await verifyChatPass(providedPass, clientIp, turnstileSecret, requestHost);
     }
 
-    // Fail-closed bot defense outside dev/test environments
-    const isDevOrTest = !import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1";
+    // Fail-closed bot defense outside dev/test environments (strictly isolated to local hosts)
+    const isDevOrTest =
+      (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") &&
+      isLocalRequestHost(requestHost);
     if (!isDevOrTest) {
       if (!turnstileSecret) {
         return new Response(

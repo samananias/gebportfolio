@@ -38,6 +38,7 @@ export const GET: APIRoute = async ({ request, cookies, locals }) => {
       key: `chess:state:${clientIp}`,
       maxRequests: 60,
       windowMs: 60_000,
+      forceEnforce: true,
     });
 
     if (!rateCheck.allowed) {
