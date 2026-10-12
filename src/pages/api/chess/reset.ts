@@ -144,7 +144,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       positionKeys: [INITIAL_FEN.split(" ")[0]],
       contributors: 0,
       seenSessions: [],
-      allTimeContributors: (game.allTimeContributors || 0) + (game.contributors > 0 ? 1 : 0),
+      allTimeContributors: game.allTimeContributors || 0,
       lastMoveAt: new Date().toISOString(),
     };
 

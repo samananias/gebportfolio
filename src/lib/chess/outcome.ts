@@ -6,6 +6,10 @@ import type { Outcome } from "turn-arbiter";
  * (checkmate, stalemate, repetition, fifty-move rule, or insufficient material).
  */
 export function getChessOutcome(fen: string, history?: string[]): Outcome | null {
+  if (history && history.length < 4) {
+    return null;
+  }
+
   try {
     const chess = new Chess();
     if (history && history.length > 0) {

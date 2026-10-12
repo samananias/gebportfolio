@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { getChessOutcome } from "../../src/lib/chess/outcome";
+import { createD1StorageProvider, INITIAL_FEN } from "../../src/lib/chess/storage";
 
 async function openChessModal(page: Page) {
   await page.waitForLoadState("domcontentloaded");
@@ -186,5 +187,69 @@ test.describe("Interactive Chess Game Board E2E Tests", () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(Array.isArray(body.archives)).toBe(true);
+  });
+
+  test("should execute strictly 1 query per storage operation without runtime DDL", async () => {
+    let executedQueries: string[] = [];
+
+    const mockD1 = {
+      prepare(query: string) {
+        executedQueries.push(query);
+        const stmt = {
+          first: async () => ({
+            version: 1,
+            fen: INITIAL_FEN,
+            history: "[]",
+            position_keys: "[]",
+            contributors: 1,
+            seen_sessions: "[]",
+            all_time_contributors: 1,
+            last_move_at: new Date().toISOString(),
+          }),
+          bind: () => stmt,
+          run: async () => ({ meta: { changes: 1 } }),
+          all: async () => ({ results: [] }),
+        };
+        return stmt;
+      },
+    };
+
+    const provider = createD1StorageProvider(mockD1 as never);
+
+    // 1. getGame() must execute strictly 1 SELECT query (zero CREATE TABLE or ALTER TABLE)
+    executedQueries = [];
+    const game = await provider.getGame();
+    expect(game).not.toBeNull();
+    expect(executedQueries.length).toBe(1);
+    expect(executedQueries[0]).toContain("SELECT * FROM game WHERE id = 1");
+    expect(
+      executedQueries.some((q) => q.includes("CREATE TABLE") || q.includes("ALTER TABLE"))
+    ).toBe(false);
+
+    // 2. saveGame() must execute strictly 1 UPDATE query
+    executedQueries = [];
+    await provider.saveGame(1, game!);
+    expect(executedQueries.length).toBe(1);
+    expect(executedQueries[0]).toContain("UPDATE game");
+    expect(
+      executedQueries.some((q) => q.includes("CREATE TABLE") || q.includes("ALTER TABLE"))
+    ).toBe(false);
+
+    // 3. archiveGame() must use WHERE NOT EXISTS for idempotent insertion
+    executedQueries = [];
+    await provider.archiveGame("1. e4 e5", "draw", 2);
+    expect(executedQueries.length).toBe(1);
+    expect(executedQueries[0]).toContain("INSERT INTO finished_game");
+    expect(executedQueries[0]).toContain("WHERE NOT EXISTS");
+  });
+
+  test("should respond with full state (200) when client ETag is stale", async ({ request }) => {
+    const res = await request.get("/api/chess/state", {
+      headers: { "If-None-Match": 'W/"chess-v999999"' },
+    });
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(data).toHaveProperty("version");
+    expect(data).toHaveProperty("fen");
   });
 });

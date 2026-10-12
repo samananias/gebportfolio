@@ -33,6 +33,11 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
     }, [onGameStateChange]);
 
     const prevVersionRef = useRef<number | null>(null);
+    const isGameOverRef = useRef(false);
+
+    useEffect(() => {
+      isGameOverRef.current = !!gameState?.outcome;
+    }, [gameState?.outcome]);
 
     // Fetch current live game state from server
     const fetchState = async () => {
@@ -69,38 +74,45 @@ export const ChessWidget: React.FC<ChessWidgetProps> = React.memo(
     useEffect(() => {
       fetchState();
 
-      let interval: NodeJS.Timeout | null = null;
+      let timer: NodeJS.Timeout | null = null;
+      let isSubscribed = true;
 
-      const startPolling = () => {
-        if (!interval) {
-          interval = setInterval(fetchState, 5000);
-        }
-      };
-
-      const stopPolling = () => {
-        if (interval) {
-          clearInterval(interval);
-          interval = null;
-        }
+      const schedulePoll = () => {
+        if (!isSubscribed) return;
+        if (timer) clearTimeout(timer);
+        // Back off to 30 seconds when match has finished (waiting for reset), 5 seconds during active game
+        const delay = isGameOverRef.current ? 30000 : 5000;
+        timer = setTimeout(async () => {
+          if (!document.hidden && isSubscribed) {
+            await fetchState();
+          }
+          if (isSubscribed) {
+            schedulePoll();
+          }
+        }, delay);
       };
 
       const handleVisibilityChange = () => {
         if (document.hidden) {
-          stopPolling();
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
         } else {
           fetchState();
-          startPolling();
+          schedulePoll();
         }
       };
 
       if (!document.hidden) {
-        startPolling();
+        schedulePoll();
       }
 
       document.addEventListener("visibilitychange", handleVisibilityChange);
 
       return () => {
-        stopPolling();
+        isSubscribed = false;
+        if (timer) clearTimeout(timer);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
       };
     }, []);

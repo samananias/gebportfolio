@@ -134,7 +134,11 @@ export async function getD1Database(locals?: App.Locals): Promise<D1DatabaseBind
   return undefined;
 }
 
-async function ensureD1Tables(d1Binding: D1DatabaseBinding): Promise<void> {
+/**
+ * Administrative bootstrap utility for creating tables on a fresh D1 database.
+ * Not called on HTTP request paths.
+ */
+export async function ensureD1Tables(d1Binding: D1DatabaseBinding): Promise<void> {
   try {
     await d1Binding
       .prepare(
@@ -184,8 +188,9 @@ async function ensureD1Tables(d1Binding: D1DatabaseBinding): Promise<void> {
     await d1Binding
       .prepare(
         `INSERT OR IGNORE INTO game (id, version, fen, history, position_keys, contributors, seen_sessions, all_time_contributors, last_move_at)
-         VALUES (1, 0, '${INITIAL_FEN}', '[]', '${JSON.stringify([INITIAL_FEN.split(" ")[0]])}', 0, '[]', 0, '${new Date().toISOString()}')`
+         VALUES (1, 0, ?, '[]', ?, 0, '[]', 0, ?)`
       )
+      .bind(INITIAL_FEN, JSON.stringify([INITIAL_FEN.split(" ")[0]]), new Date().toISOString())
       .run();
   } catch (e) {
     console.error("[D1 Auto-Schema Error]:", e);
@@ -195,21 +200,12 @@ async function ensureD1Tables(d1Binding: D1DatabaseBinding): Promise<void> {
 /**
  * Cloudflare D1 Storage Provider
  * Implements atomic SQL Compare-and-Swap (CAS): UPDATE game SET ... WHERE id = 1 AND version = ?
+ * No runtime DDL or auto-migration statements are executed on read or write paths.
  */
 export function createD1StorageProvider(d1Binding: D1DatabaseBinding): StorageProvider {
-  let isInitialized = false;
-
-  const initSchema = async () => {
-    if (!isInitialized) {
-      await ensureD1Tables(d1Binding);
-      isInitialized = true;
-    }
-  };
-
   return {
     async getGame(): Promise<StoredGameState | null> {
       try {
-        await initSchema();
         const row = (await d1Binding.prepare("SELECT * FROM game WHERE id = 1").first()) as Record<
           string,
           unknown
@@ -249,7 +245,6 @@ export function createD1StorageProvider(d1Binding: D1DatabaseBinding): StoragePr
       nextState: StoredGameState
     ): Promise<{ ok: true; state: StoredGameState } | { ok: false; reason: "superseded" }> {
       try {
-        await initSchema();
         const stmt = d1Binding.prepare(`
           UPDATE game
           SET version                = ?,
@@ -290,11 +285,14 @@ export function createD1StorageProvider(d1Binding: D1DatabaseBinding): StoragePr
 
     async archiveGame(pgn: string, outcome: string, contributors: number): Promise<void> {
       try {
+        // Atomic idempotency: insert if and only if PGN is not already recorded
         await d1Binding
           .prepare(
-            `INSERT INTO finished_game (pgn, outcome, contributors, ended_at) VALUES (?, ?, ?, ?)`
+            `INSERT INTO finished_game (pgn, outcome, contributors, ended_at)
+             SELECT ?, ?, ?, ?
+             WHERE NOT EXISTS (SELECT 1 FROM finished_game WHERE pgn = ?)`
           )
-          .bind(pgn, outcome, contributors, new Date().toISOString())
+          .bind(pgn, outcome, contributors, new Date().toISOString(), pgn)
           .run();
       } catch (e) {
         console.error("[D1 Storage] Error archiving finished game:", e);
@@ -303,7 +301,6 @@ export function createD1StorageProvider(d1Binding: D1DatabaseBinding): StoragePr
 
     async getArchivedGames(limit = 10): Promise<ArchivedGameRecord[]> {
       try {
-        await initSchema();
         const { results } = await d1Binding
           .prepare(`SELECT * FROM finished_game ORDER BY id DESC LIMIT ?`)
           .bind(limit)
