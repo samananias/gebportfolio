@@ -9,6 +9,7 @@
  */
 
 import { getWorkersEnv } from "./bindings";
+import { isLocalRequestHost } from "./turnstile";
 
 /**
  * Emergency kill switch. Set CHAT_LOCKED=1 in Cloudflare (Settings > Variables)
@@ -55,7 +56,9 @@ export function getClientIp(request: Request): string {
  * Drops raw cURL or external cross-site automation in production.
  */
 export function isOriginAllowed(request: Request): boolean {
-  if (!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") {
+  const host = request.headers.get("host");
+
+  if ((!import.meta.env.PROD || process.env.PLAYWRIGHT_E2E === "1") && isLocalRequestHost(host)) {
     return true;
   }
 
@@ -71,11 +74,13 @@ export function isOriginAllowed(request: Request): boolean {
     "samananias.is-a.dev",
     "gebportfolio.pages.dev",
     "gebportfolio.workers.dev",
-    "localhost",
-    "127.0.0.1",
   ]);
 
-  const host = request.headers.get("host");
+  if (isLocalRequestHost(host)) {
+    allowedHosts.add("localhost");
+    allowedHosts.add("127.0.0.1");
+  }
+
   if (host) {
     allowedHosts.add(host);
     allowedHosts.add(host.split(":")[0]);

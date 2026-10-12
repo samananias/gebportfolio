@@ -102,8 +102,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const requestedName = sender.trim();
     let activePass: string | null = null;
 
+    const requestHost = request.headers.get("host") || new URL(request.url).host;
+
     if (providedPass) {
-      const info = await verifyChatPassDetailed(providedPass, clientIp, turnstileSecret);
+      const info = await verifyChatPassDetailed(
+        providedPass,
+        clientIp,
+        turnstileSecret,
+        requestHost
+      );
       if (info.valid) {
         if (info.name !== requestedName) {
           return new Response(
