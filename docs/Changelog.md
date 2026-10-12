@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Refactored agent instructions and architectural guard enforcement per `agents-md-authoring` specification (`AGENTS.md`, `CLAUDE.md`, `.agents/AGENTS.md`, `GEMINI.md`, `package.json`, `scripts/check-boundaries.js`):
+  - **Mechanical Boundary Enforcement (`scripts/check-boundaries.js`)**: Implemented deterministic Zero-Dependency automated validator checking for prohibited system emojis, CSS gradients, arbitrary Tailwind hex classes (`bg-[#...]`), and forbidden `tailwind.config.*` files. Wired into `pnpm run check` and verified across clean and deliberate violation states.
+  - **Two-Tier Command Structure**: Sharpened commands in `AGENTS.md` into a rapid developer loop `quick (each change)` (`lint && check`) and full verification gate `full (before "done")` (`format && lint && check && build && test:e2e && test:a11y`) with explicit single-test Playwright invocation.
+  - **Test Integrity Boundary**: Mandated failure contract: `if a check fails, fix the cause — never skip, delete, or loosen a test to make it pass; report which checks ran`.
+  - **Single Source of Truth Consolidation**: Converted duplicated copies (`CLAUDE.md`, `.agents/AGENTS.md`) into 1-line pointers to root `AGENTS.md`, eliminating duplicate token load in Antigravity and preventing multi-file rule drift.
+  - **Gemini Rule Router Integration**: Linked root `AGENTS.md` in `GEMINI.md` within `USER_CUSTOM_RULES` block.
+  - **Lean Token Efficiency**: Compressed `AGENTS.md` from 48 lines to 36 high-signal lines, eliminating redundant audience copy covered by `PRODUCT.md` and resolving the hex literal contradiction against semantic tokens.
+
 - Implemented Roadmap 0011.1: Live Chat, Collaborative Chess & Telemetry Security Hardening and KV Quota Preservation:
   - **Phase 1: Zero-KV Telemetry Isolation (`POST /api/crop/usage`)**: Replaced KV reads and writes (`crop:rl:${ip}` and `crop:usage:${id}`) with edge in-memory rate limiting (`checkRateLimit`) and origin verification (`isOriginAllowed`), permanently reducing telemetry KV writes from 2 per call to 0 and safeguarding the 1,000 daily KV write quota from burn-out.
   - **Phase 2: Tab-Visibility Lifecycle & Polling Optimization (`ChessWidget.tsx`)**: Bound `visibilitychange` listeners to suspend network polling when browser tabs are hidden (`document.hidden === true`), relaxed polling intervals from 3s to 5s (40% baseline reduction), and forwarded `If-None-Match` ETags to handle HTTP 304 responses with zero component re-rendering.
